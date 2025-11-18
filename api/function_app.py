@@ -31,6 +31,25 @@ def check_freshdesk_config():
     domain = os.environ.get('FRESHDESK_DOMAIN')
     return bool(api_key) and bool(domain)
 
+def get_custom_field_value(custom_fields, field_prefix):
+    """
+    Get custom field value by prefix (handles field names with IDs appended)
+    Example: 'cf_platform' matches 'cf_platform627919'
+    """
+    if not custom_fields:
+        return None
+
+    # First try exact match
+    if field_prefix in custom_fields:
+        return custom_fields[field_prefix]
+
+    # Then try prefix match (for fields with IDs appended)
+    for key, value in custom_fields.items():
+        if key.startswith(field_prefix):
+            return value
+
+    return None
+
 def process_ticket(ticket, domain):
     """Process ticket data - add computed fields"""
     # Map status codes to names
@@ -41,18 +60,13 @@ def process_ticket(ticket, domain):
     priority_map = {1: 'Low', 2: 'Medium', 3: 'High', 4: 'Urgent'}
     ticket['priority_name'] = priority_map.get(ticket.get('priority'), 'Unknown')
 
-    # Process custom fields
-    if ticket.get('custom_fields'):
-        cf = ticket['custom_fields']
-        ticket['platform'] = cf.get('cf_platform', 'Unknown')
-        ticket['league'] = cf.get('cf_league', 'Unknown')
-        ticket['issue_type'] = cf.get('cf_issue_type', 'Unknown')
-        ticket['dev_assistance_needed'] = cf.get('cf_dev_assistance_needed', False)
-    else:
-        ticket['platform'] = 'Unknown'
-        ticket['league'] = 'Unknown'
-        ticket['issue_type'] = 'Unknown'
-        ticket['dev_assistance_needed'] = False
+    # Process custom fields (handles both 'cf_platform' and 'cf_platform627919' formats)
+    cf = ticket.get('custom_fields', {})
+
+    ticket['platform'] = get_custom_field_value(cf, 'cf_platform') or 'Unknown'
+    ticket['league'] = get_custom_field_value(cf, 'cf_league') or 'Unknown'
+    ticket['issue_type'] = get_custom_field_value(cf, 'cf_issue_type') or 'Unknown'
+    ticket['dev_assistance_needed'] = get_custom_field_value(cf, 'cf_dev_assistance_needed') or False
 
     # Add Freshdesk URL
     ticket['freshdesk_url'] = f"https://{domain}.freshdesk.com/a/tickets/{ticket['id']}"
