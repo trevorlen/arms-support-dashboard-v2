@@ -16,10 +16,47 @@ function App() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [daysBack, setDaysBack] = useState(7);
+  const [dateRange, setDateRange] = useState('last_week');
   const [lastUpdate, setLastUpdate] = useState(null);
   const [apiStatus, setApiStatus] = useState('checking');
   const [selectedTicketId, setSelectedTicketId] = useState(null);
+
+  const calculateDateRange = (range) => {
+    const now = new Date();
+    let startDate;
+
+    if (range === 'last_week') {
+      // Calculate previous full week (Sunday to Sunday)
+      const currentDay = now.getDay(); // 0 = Sunday, 6 = Saturday
+      const daysToLastSunday = currentDay === 0 ? 7 : currentDay;
+
+      // End of last week (last Sunday at 11:59:59 PM)
+      const endDate = new Date(now);
+      endDate.setDate(now.getDate() - daysToLastSunday);
+      endDate.setHours(23, 59, 59, 999);
+
+      // Start of last week (Sunday before that at 12:00:00 AM)
+      startDate = new Date(endDate);
+      startDate.setDate(endDate.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+
+      return {
+        start_date: startDate.toISOString(),
+        end_date: endDate.toISOString()
+      };
+    } else {
+      // Regular days back calculation
+      const daysBack = Number(range);
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - daysBack);
+      startDate.setHours(0, 0, 0, 0);
+
+      return {
+        start_date: startDate.toISOString(),
+        end_date: now.toISOString()
+      };
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -30,10 +67,8 @@ function App() {
       const healthResponse = await getHealth();
       setApiStatus('connected');
 
-      // Calculate start_date from daysBack
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - daysBack);
-      const start_date = startDate.toISOString();
+      // Calculate date range
+      const { start_date, end_date } = calculateDateRange(dateRange);
 
       // Fetch tickets and summary in parallel
       const [ticketsResponse, summaryResponse] = await Promise.all([
@@ -55,7 +90,7 @@ function App() {
 
   useEffect(() => {
     fetchData();
-  }, [daysBack]);
+  }, [dateRange]);
 
   const tabs = [
     { id: 'platform', name: 'By Platform', icon: BarChart3 },
@@ -120,10 +155,11 @@ function App() {
             <Calendar className="w-5 h-5 text-gray-500" />
             <span className="text-sm font-medium text-gray-700">Date Range:</span>
             <select
-              value={daysBack}
-              onChange={(e) => setDaysBack(Number(e.target.value))}
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value)}
               className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
+              <option value="last_week">Last Week (Sun-Sun)</option>
               <option value={1}>Last 24 hours</option>
               <option value={7}>Last 7 days</option>
               <option value={14}>Last 14 days</option>
