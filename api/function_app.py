@@ -3,10 +3,44 @@ import json
 import os
 import requests
 import logging
+import hashlib
 from base64 import b64encode
 from datetime import datetime, timezone
+from functools import lru_cache
+from time import time
 
 app = func.FunctionApp()
+
+# ============================================================================
+# Cache Configuration
+# ============================================================================
+
+# Simple in-memory cache with TTL (5 minutes)
+_cache = {}
+CACHE_TTL = 300  # 5 minutes in seconds
+
+def get_cache_key(url, params):
+    """Generate cache key from URL and params"""
+    cache_str = f"{url}_{json.dumps(params, sort_keys=True)}"
+    return hashlib.md5(cache_str.encode()).hexdigest()
+
+def get_from_cache(cache_key):
+    """Get data from cache if not expired"""
+    if cache_key in _cache:
+        data, timestamp = _cache[cache_key]
+        if time() - timestamp < CACHE_TTL:
+            logging.info(f"Cache HIT for key: {cache_key[:8]}...")
+            return data
+        else:
+            # Expired, remove from cache
+            del _cache[cache_key]
+            logging.info(f"Cache EXPIRED for key: {cache_key[:8]}...")
+    return None
+
+def set_in_cache(cache_key, data):
+    """Store data in cache with timestamp"""
+    _cache[cache_key] = (data, time())
+    logging.info(f"Cache SET for key: {cache_key[:8]}...")
 
 # ============================================================================
 # Helper Functions
@@ -30,6 +64,43 @@ def check_freshdesk_config():
     api_key = os.environ.get('FRESHDESK_API_KEY')
     domain = os.environ.get('FRESHDESK_DOMAIN')
     return bool(api_key) and bool(domain)
+
+def fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=10):
+    """
+    Fetch all pages from Freshdesk API with pagination support
+    Freshdesk returns max 30 results per page and uses Link header for pagination
+    """
+    all_tickets = []
+    page = 1
+
+    while page <= max_pages:
+        # Add page parameter
+        page_params = {**params, 'page': page, 'per_page': 100}  # Request 100 per page (Freshdesk max)
+
+        logging.info(f"Fetching page {page} from Freshdesk...")
+        response = requests.get(base_url, headers=headers, params=page_params, timeout=30)
+        response.raise_for_status()
+
+        page_data = response.json()
+
+        if not page_data:
+            # No more data
+            logging.info(f"No more data on page {page}. Total tickets fetched: {len(all_tickets)}")
+            break
+
+        all_tickets.extend(page_data)
+        logging.info(f"Page {page}: fetched {len(page_data)} tickets. Total so far: {len(all_tickets)}")
+
+        # Check if there are more pages
+        # Freshdesk includes Link header with next page URL
+        link_header = response.headers.get('Link', '')
+        if 'rel="next"' not in link_header:
+            logging.info(f"No more pages. Total tickets fetched: {len(all_tickets)}")
+            break
+
+        page += 1
+
+    return all_tickets
 
 def get_custom_field_value(custom_fields, field_prefix):
     """
@@ -152,13 +223,21 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
         params['updated_since'] = start_date
 
     try:
-        # Fetch tickets from Freshdesk
-        logging.info(f"Fetching tickets from Freshdesk: {base_url}")
-        response = requests.get(base_url, headers=headers, params=params, timeout=30)
-        response.raise_for_status()
+        # Check cache first
+        cache_key = get_cache_key(base_url, params)
+        cached_data = get_from_cache(cache_key)
 
-        tickets_data = response.json()
-        logging.info(f"Fetched {len(tickets_data)} tickets from Freshdesk")
+        if cached_data is not None:
+            tickets_data = cached_data
+            logging.info(f"Using {len(tickets_data)} cached tickets")
+        else:
+            # Fetch all pages from Freshdesk with pagination
+            logging.info(f"Fetching tickets from Freshdesk with pagination: {base_url}")
+            tickets_data = fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=10)
+            logging.info(f"Fetched total of {len(tickets_data)} tickets from Freshdesk")
+
+            # Cache the results
+            set_in_cache(cache_key, tickets_data)
 
         # Process each ticket
         processed_tickets = [process_ticket(ticket, domain) for ticket in tickets_data]
@@ -302,11 +381,21 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
         params['updated_since'] = start_date
 
     try:
-        # Fetch tickets
-        logging.info(f"Fetching tickets for summary: {base_url}")
-        response = requests.get(base_url, headers=headers, params=params, timeout=30)
-        response.raise_for_status()
-        tickets_data = response.json()
+        # Check cache first
+        cache_key = get_cache_key(base_url, params)
+        cached_data = get_from_cache(cache_key)
+
+        if cached_data is not None:
+            tickets_data = cached_data
+            logging.info(f"Using {len(tickets_data)} cached tickets for summary")
+        else:
+            # Fetch all pages from Freshdesk with pagination
+            logging.info(f"Fetching tickets for summary with pagination: {base_url}")
+            tickets_data = fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=10)
+            logging.info(f"Fetched total of {len(tickets_data)} tickets for summary")
+
+            # Cache the results
+            set_in_cache(cache_key, tickets_data)
 
         logging.info(f"Processing {len(tickets_data)} tickets for summary")
 
