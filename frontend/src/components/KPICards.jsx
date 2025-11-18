@@ -48,7 +48,7 @@ const KPICards = ({ stats, loading }) => {
     },
     {
       title: 'First Response Time',
-      value: formatResponseTime(stats?.avg_first_response_time || stats?.first_response_time),
+      value: formatResponseTime(stats?.response_time?.first || stats?.response_time?.average),
       icon: Timer,
       color: 'purple',
       bgColor: 'bg-purple-50',

@@ -181,7 +181,7 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
         logging.info(f"Returning {len(filtered_tickets)} tickets after filtering")
 
         return func.HttpResponse(
-            body=json.dumps(filtered_tickets),
+            body=json.dumps({"data": filtered_tickets}),
             mimetype="application/json",
             status_code=200
         )
@@ -329,6 +329,7 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
                     "first": None,  # TODO: Calculate from ticket data
                     "average": None
                 },
+                "agent_interactions": 0,  # TODO: Calculate from conversations data
                 "priorities": {
                     "high": len([t for t in tickets_data if t.get('priority') >= 3]),
                     "urgent": len([t for t in tickets_data if t.get('priority') == 4]),
