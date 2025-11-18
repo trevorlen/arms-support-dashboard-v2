@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 // API Base URL - uses Azure Functions locally (localhost:7071) or Azure Static Web Apps in production
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:7071/api';
+// In production (when VITE_API_URL is not set), use relative path '/api' for Azure Static Web Apps managed functions
+const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.MODE === 'production' ? '/api' : 'http://localhost:7071/api');
 
 const api = axios.create({
   baseURL: API_BASE_URL,

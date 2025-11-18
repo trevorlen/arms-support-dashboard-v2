@@ -8,9 +8,10 @@ import DayOfWeekDashboard from './components/DayOfWeekDashboard';
 import TicketTypesDashboard from './components/TicketTypesDashboard';
 import PriorityIssueTypeDashboard from './components/PriorityIssueTypeDashboard';
 import DevOpsDashboard from './components/DevOpsDashboard';
+import ChangeRequestsDashboard from './components/ChangeRequestsDashboard';
 import TicketDetailModal from './components/TicketDetailModal';
 import LoadingIndicator from './components/LoadingIndicator';
-import { getTickets, getSummary, getHealth } from './services/api';
+import { getTickets, getSummary, getHealth, getDevOpsItems } from './services/api';
 
 function App() {
   const [activeTab, setActiveTab] = useState('platform');
@@ -92,14 +93,16 @@ function App() {
       // ARMS Support Group ID
       const ARMS_GROUP_ID = '154000130280';
 
-      // Fetch tickets and summary in parallel (filtered by ARMS Support Group)
-      const [ticketsResponse, summaryResponse] = await Promise.all([
+      // Fetch tickets, summary, and devops items in parallel (filtered by ARMS Support Group)
+      const [ticketsResponse, summaryResponse, devopsResponse] = await Promise.all([
         getTickets({ start_date, limit: 10000, group_id: ARMS_GROUP_ID }),
         getSummary({ start_date, group_id: ARMS_GROUP_ID }),
+        getDevOpsItems(),
       ]);
 
       setTickets(ticketsResponse);
       setSummary(summaryResponse.data);  // Extract the data object
+      setDevopsTickets(devopsResponse.data);  // Extract the data array
       setLastUpdate(new Date());
     } catch (err) {
       console.error('Error fetching data:', err);
@@ -122,6 +125,7 @@ function App() {
     { id: 'types', name: 'By Type', icon: FileText },
     { id: 'priority', name: 'Priority & Issues', icon: Target },
     { id: 'devops', name: 'DevOps', icon: BarChart3 },
+    { id: 'changerequest', name: 'Change Requests', icon: FileText },
   ];
 
   return (
@@ -255,6 +259,7 @@ function App() {
             {activeTab === 'types' && <TicketTypesDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'priority' && <PriorityIssueTypeDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'devops' && <DevOpsDashboard devopsTickets={devopsTickets} loading={loading} />}
+            {activeTab === 'changerequest' && <ChangeRequestsDashboard loading={loading} />}
           </>
         )}
       </main>
