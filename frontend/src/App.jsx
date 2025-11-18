@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Trophy, Clock, RefreshCw, Calendar, CalendarDays, FileText, Target } from 'lucide-react';
+import { BarChart3, Trophy, Clock, RefreshCw, Calendar, CalendarDays, FileText, Target, Users } from 'lucide-react';
 import KPICards from './components/KPICards';
 import PlatformDashboard from './components/PlatformDashboard';
 import LeagueDashboard from './components/LeagueDashboard';
@@ -9,6 +9,7 @@ import TicketTypesDashboard from './components/TicketTypesDashboard';
 import PriorityIssueTypeDashboard from './components/PriorityIssueTypeDashboard';
 import DevOpsDashboard from './components/DevOpsDashboard';
 import ChangeRequestsDashboard from './components/ChangeRequestsDashboard';
+import StaffPerformanceDashboard from './components/StaffPerformanceDashboard';
 import TicketDetailModal from './components/TicketDetailModal';
 import LoadingIndicator from './components/LoadingIndicator';
 import { getTickets, getSummary, getHealth, getDevOpsItems } from './services/api';
@@ -24,6 +25,9 @@ function App() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [apiStatus, setApiStatus] = useState('checking');
   const [selectedTicketId, setSelectedTicketId] = useState(null);
+
+  // Feature flags
+  const ENABLE_CHANGE_REQUESTS = false;
 
   const calculateDateRange = (range) => {
     const now = new Date();
@@ -125,7 +129,8 @@ function App() {
     { id: 'types', name: 'By Type', icon: FileText },
     { id: 'priority', name: 'Priority & Issues', icon: Target },
     { id: 'devops', name: 'DevOps', icon: BarChart3 },
-    { id: 'changerequest', name: 'Change Requests', icon: FileText },
+    ...(ENABLE_CHANGE_REQUESTS ? [{ id: 'changerequest', name: 'Change Requests', icon: FileText }] : []),
+    { id: 'staff', name: 'Staff Performance', icon: Users },
   ];
 
   return (
@@ -134,11 +139,18 @@ function App() {
       <header className="bg-gradient-to-r from-primary-600 to-primary-800 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-white">ARMS Support Dashboard</h1>
-              <p className="text-primary-100 mt-1">
-                Real-time ticket analytics and insights
-              </p>
+            <div className="flex items-center space-x-4">
+              <img
+                src="/arms-logo.png"
+                alt="ARMS Logo"
+                className="h-16 w-auto"
+              />
+              <div>
+                <h1 className="text-3xl font-bold text-white">ARMS Support Dashboard</h1>
+                <p className="text-primary-100 mt-1">
+                  Real-time ticket analytics and insights
+                </p>
+              </div>
             </div>
             <div className="flex items-center space-x-4">
               {/* API Status Indicator */}
@@ -252,14 +264,15 @@ function App() {
             </div>
 
             {/* Dashboard Content */}
-            {activeTab === 'platform' && <PlatformDashboard summary={summary} loading={loading} onTicketClick={setSelectedTicketId} />}
+            {activeTab === 'platform' && <PlatformDashboard summary={summary} tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'league' && <LeagueDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'hour' && <HourOfDayDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'dayofweek' && <DayOfWeekDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'types' && <TicketTypesDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'priority' && <PriorityIssueTypeDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'devops' && <DevOpsDashboard devopsTickets={devopsTickets} loading={loading} />}
-            {activeTab === 'changerequest' && <ChangeRequestsDashboard loading={loading} />}
+            {activeTab === 'changerequest' && ENABLE_CHANGE_REQUESTS && <ChangeRequestsDashboard loading={loading} />}
+            {activeTab === 'staff' && <StaffPerformanceDashboard tickets={tickets} loading={loading} />}
           </>
         )}
       </main>

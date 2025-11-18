@@ -133,9 +133,13 @@ def get_custom_field_value(custom_fields, field_prefix):
         return custom_fields[field_prefix]
 
     # Then try prefix match (for fields with IDs appended)
+    # Make sure we match the field_prefix followed by only digits to avoid confusion
     for key, value in custom_fields.items():
         if key.startswith(field_prefix):
-            return value
+            # Check if the rest is just digits (e.g., cf_platform627919)
+            suffix = key[len(field_prefix):]
+            if not suffix or suffix.isdigit():
+                return value
 
     return None
 

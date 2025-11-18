@@ -92,6 +92,13 @@ const TicketTypesDashboard = ({ tickets, summary, loading }) => {
       .sort((a, b) => b.count - a.count);
   };
 
+  // Check if a ticket type has meaningful issue types (not just "Unknown")
+  const hasValidIssueTypes = (ticketTypeName) => {
+    const issueTypes = getIssueTypes(ticketTypeName);
+    // Return false if no issue types or only "Unknown"
+    return issueTypes.length > 1 || (issueTypes.length === 1 && issueTypes[0].name !== 'Unknown');
+  };
+
   return (
     <div className="space-y-6">
       {/* Platform Filter */}
@@ -162,13 +169,31 @@ const TicketTypesDashboard = ({ tickets, summary, loading }) => {
               <Tooltip
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
-                    const percentage = ((payload[0].value / total) * 100).toFixed(1);
+                    const ticketTypeName = payload[0].payload.name;
+                    const ticketCount = payload[0].value;
+                    const percentage = ((ticketCount / total) * 100).toFixed(1);
+                    const issueTypes = getIssueTypes(ticketTypeName);
+
                     return (
-                      <div className="bg-white p-4 border border-gray-200 rounded shadow-lg">
-                        <p className="font-semibold text-gray-900">{payload[0].payload.name}</p>
-                        <p className="text-primary-600">
-                          {payload[0].value} tickets ({percentage}%)
+                      <div className="bg-white p-4 border border-gray-200 rounded shadow-lg max-w-sm">
+                        <p className="font-semibold text-gray-900 mb-2">{ticketTypeName}</p>
+                        <p className="text-primary-600 mb-3">
+                          {ticketCount} tickets ({percentage}%)
                         </p>
+
+                        {hasValidIssueTypes(ticketTypeName) && issueTypes.length > 0 && (
+                          <div className="border-t border-gray-200 pt-2">
+                            <p className="text-xs font-semibold text-gray-700 mb-2">Breakdown by Issue Type:</p>
+                            <div className="space-y-1">
+                              {issueTypes.map(({ name, count }) => (
+                                <div key={name} className="flex justify-between text-xs">
+                                  <span className="text-gray-600">{name}:</span>
+                                  <span className="font-medium text-gray-900">{count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   }
@@ -193,20 +218,28 @@ const TicketTypesDashboard = ({ tickets, summary, loading }) => {
             const isExpanded = expandedTypes[ticketType.name];
             const issueTypes = getIssueTypes(ticketType.name);
             const percentage = ((ticketType.count / total) * 100).toFixed(1);
+            const hasValidIssues = hasValidIssueTypes(ticketType.name);
 
             return (
               <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
                 {/* Ticket Type */}
                 <div
-                  onClick={() => toggleExpanded(ticketType.name)}
-                  className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors"
+                  onClick={() => hasValidIssues && toggleExpanded(ticketType.name)}
+                  className={`flex items-center justify-between p-4 bg-gray-50 transition-colors ${
+                    hasValidIssues ? 'hover:bg-gray-100 cursor-pointer' : ''
+                  }`}
                 >
                   <div className="flex items-center space-x-3">
-                    {isExpanded ? (
-                      <ChevronDown className="w-5 h-5 text-gray-600" />
-                    ) : (
-                      <ChevronRight className="w-5 h-5 text-gray-600" />
+                    {hasValidIssues && (
+                      <>
+                        {isExpanded ? (
+                          <ChevronDown className="w-5 h-5 text-gray-600" />
+                        ) : (
+                          <ChevronRight className="w-5 h-5 text-gray-600" />
+                        )}
+                      </>
                     )}
+                    {!hasValidIssues && <div className="w-5 h-5" />}
                     <div
                       className="w-4 h-4 rounded-full"
                       style={{ backgroundColor: COLORS[index % COLORS.length] }}
@@ -220,7 +253,7 @@ const TicketTypesDashboard = ({ tickets, summary, loading }) => {
                 </div>
 
                 {/* Issue Types (shown when expanded) */}
-                {isExpanded && (
+                {isExpanded && hasValidIssues && (
                   <div className="bg-white">
                     {issueTypes.map((issueType, issueIndex) => {
                       const issuePercentage = ((issueType.count / ticketType.count) * 100).toFixed(1);

@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 // Blue, purple, and grey color scheme
 const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280', '#9CA3AF'];
 
-const PlatformDashboard = ({ summary, loading }) => {
+const PlatformDashboard = ({ summary, tickets, loading }) => {
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -21,6 +21,23 @@ const PlatformDashboard = ({ summary, loading }) => {
   })).sort((a, b) => b.count - a.count);
 
   const total = platformData.reduce((sum, item) => sum + item.count, 0);
+
+  // Calculate ticket type breakdown per platform
+  const getTicketTypeBreakdown = (platformName) => {
+    if (!tickets?.data) return {};
+
+    const platformTickets = tickets.data.filter(
+      ticket => (ticket.platform || 'Unknown') === platformName
+    );
+
+    const breakdown = {};
+    platformTickets.forEach(ticket => {
+      const ticketType = ticket.custom_ticket_type || 'Unknown';
+      breakdown[ticketType] = (breakdown[ticketType] || 0) + 1;
+    });
+
+    return breakdown;
+  };
 
   return (
     <div className="space-y-6">
@@ -41,24 +58,43 @@ const PlatformDashboard = ({ summary, loading }) => {
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={platformData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                  <XAxis dataKey="name" />
                   <YAxis />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
-                        const percentage = ((payload[0].value / total) * 100).toFixed(1);
+                        const platformName = payload[0].payload.name;
+                        const ticketCount = payload[0].value;
+                        const percentage = ((ticketCount / total) * 100).toFixed(1);
+                        const ticketTypeBreakdown = getTicketTypeBreakdown(platformName);
+                        const sortedTypes = Object.entries(ticketTypeBreakdown)
+                          .sort((a, b) => b[1] - a[1]);
+
                         return (
-                          <div className="bg-white p-4 border border-gray-200 rounded shadow-lg">
-                            <p className="font-semibold text-gray-900">{payload[0].payload.name}</p>
-                            <p className="text-primary-600">{payload[0].value} tickets ({percentage}%)</p>
+                          <div className="bg-white p-4 border border-gray-200 rounded shadow-lg max-w-sm">
+                            <p className="font-semibold text-gray-900 mb-2">{platformName}</p>
+                            <p className="text-primary-600 mb-3">{ticketCount} tickets ({percentage}%)</p>
+
+                            {sortedTypes.length > 0 && (
+                              <div className="border-t border-gray-200 pt-2">
+                                <p className="text-xs font-semibold text-gray-700 mb-2">Breakdown by Type:</p>
+                                <div className="space-y-1">
+                                  {sortedTypes.map(([type, count]) => (
+                                    <div key={type} className="flex justify-between text-xs">
+                                      <span className="text-gray-600">{type}:</span>
+                                      <span className="font-medium text-gray-900">{count}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       }
                       return null;
                     }}
                   />
-                  <Legend />
-                  <Bar dataKey="count" name="Tickets" radius={[8, 8, 0, 0]}>
+                  <Bar dataKey="count" radius={[8, 8, 0, 0]}>
                     {platformData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
