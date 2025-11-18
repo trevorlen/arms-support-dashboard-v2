@@ -310,47 +310,69 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
 
         logging.info(f"Processing {len(tickets_data)} tickets for summary")
 
-        # Calculate summary statistics
+        # Calculate summary statistics (structured for frontend compatibility)
+        total_count = len(tickets_data)
+        resolved_count = len([t for t in tickets_data if t.get('status') in [4, 5]])
+
         summary_data = {
-            "total_tickets": len(tickets_data),
-            "open_tickets": len([t for t in tickets_data if t.get('status') == 2]),
-            "pending_tickets": len([t for t in tickets_data if t.get('status') == 3]),
-            "resolved_tickets": len([t for t in tickets_data if t.get('status') in [4, 5]]),
-            "high_priority": len([t for t in tickets_data if t.get('priority') >= 3]),
-            "urgent_priority": len([t for t in tickets_data if t.get('priority') == 4]),
-            "system_issues": 0,
-            "user_issues": 0,
-            "dev_assistance_needed": 0,
-            "platforms": {},
-            "leagues": {},
-            "issue_types": {}
+            "data": {
+                "tickets": {
+                    "total": total_count,
+                    "created": total_count,  # Same as total for current period
+                    "resolved": resolved_count,
+                    "open": len([t for t in tickets_data if t.get('status') == 2]),
+                    "pending": len([t for t in tickets_data if t.get('status') == 3]),
+                    "created_change": 0,  # TODO: Calculate vs previous period
+                    "resolved_change": 0   # TODO: Calculate vs previous period
+                },
+                "response_time": {
+                    "first": None,  # TODO: Calculate from ticket data
+                    "average": None
+                },
+                "priorities": {
+                    "high": len([t for t in tickets_data if t.get('priority') >= 3]),
+                    "urgent": len([t for t in tickets_data if t.get('priority') == 4]),
+                    "medium": len([t for t in tickets_data if t.get('priority') == 2]),
+                    "low": len([t for t in tickets_data if t.get('priority') == 1])
+                },
+                "issues": {
+                    "system": 0,
+                    "user": 0,
+                    "dev_assistance_needed": 0
+                },
+                "platforms": {},
+                "leagues": {},
+                "issue_types": {}
+            }
         }
 
-        # Process custom fields
-        for ticket in tickets_data:
-            if ticket.get('custom_fields'):
-                cf = ticket['custom_fields']
+        # Process custom fields using processed tickets
+        processed_tickets = [process_ticket(t, domain) for t in tickets_data]
 
-                # Count issue types
-                issue_type = cf.get('cf_issue_type', 'Unknown')
-                if issue_type == 'System Issue':
-                    summary_data['system_issues'] += 1
-                elif issue_type == 'User Issue':
-                    summary_data['user_issues'] += 1
+        for ticket in processed_tickets:
+            # Count issue types
+            issue_type = ticket.get('issue_type', 'Unknown')
+            if issue_type == 'System Issue':
+                summary_data['data']['issues']['system'] += 1
+            elif issue_type == 'User Issue':
+                summary_data['data']['issues']['user'] += 1
 
-                summary_data['issue_types'][issue_type] = summary_data['issue_types'].get(issue_type, 0) + 1
+            summary_data['data']['issue_types'][issue_type] = summary_data['data']['issue_types'].get(issue_type, 0) + 1
 
-                # Count platforms
-                platform = cf.get('cf_platform', 'Unknown')
-                summary_data['platforms'][platform] = summary_data['platforms'].get(platform, 0) + 1
+            # Count platforms
+            platform = ticket.get('platform', 'Unknown')
+            if platform != 'Unknown':
+                summary_data['data']['platforms'][platform] = summary_data['data']['platforms'].get(platform, 0) + 1
 
-                # Count leagues
-                league = cf.get('cf_league', 'Unknown')
-                summary_data['leagues'][league] = summary_data['leagues'].get(league, 0) + 1
+            # Count leagues
+            league = ticket.get('league', 'Unknown')
+            if league and league != 'Unknown':
+                summary_data['data']['leagues'][league] = summary_data['data']['leagues'].get(league, 0) + 1
 
-                # Count dev assistance needed
-                if cf.get('cf_dev_assistance_needed'):
-                    summary_data['dev_assistance_needed'] += 1
+            # Count dev assistance needed
+            dev_needed = ticket.get('dev_assistance_needed')
+            if dev_needed and str(dev_needed).lower() in ['yes', 'true', '1']:
+                summary_data['data']['issues']['dev_assistance_needed'] += 1
 
         logging.info(f"Summary generated successfully")
 

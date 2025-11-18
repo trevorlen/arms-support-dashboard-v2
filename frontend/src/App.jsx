@@ -42,7 +42,7 @@ function App() {
       ]);
 
       setTickets(ticketsResponse);
-      setSummary(summaryResponse);
+      setSummary(summaryResponse.data);  // Extract the data object
       setLastUpdate(new Date());
     } catch (err) {
       console.error('Error fetching data:', err);
