@@ -376,6 +376,13 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
 
         logging.info(f"Summary generated successfully")
 
+        # Add backward-compatible top-level fields and aliases
+        summary_data['data']['system_issues'] = summary_data['data']['issues']['system']
+        summary_data['data']['user_issues'] = summary_data['data']['issues']['user']
+        summary_data['data']['by_platform'] = summary_data['data']['platforms']  # Alias for backward compatibility
+        summary_data['data']['by_league'] = summary_data['data']['leagues']      # Alias for backward compatibility
+        summary_data['data']['by_type'] = summary_data['data']['issue_types']    # Alias for backward compatibility
+
         return func.HttpResponse(
             body=json.dumps(summary_data),
             mimetype="application/json",
