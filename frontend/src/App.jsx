@@ -30,14 +30,19 @@ function App() {
       const healthResponse = await getHealth();
       setApiStatus('connected');
 
+      // Calculate start_date from daysBack
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - daysBack);
+      const start_date = startDate.toISOString();
+
       // Fetch tickets and summary in parallel
       const [ticketsResponse, summaryResponse] = await Promise.all([
-        getTickets({ days_back: daysBack, limit: 10000 }),
-        getSummary({ days_back: daysBack }),
+        getTickets({ start_date, limit: 10000 }),
+        getSummary({ start_date }),
       ]);
 
       setTickets(ticketsResponse);
-      setSummary(summaryResponse.data);
+      setSummary(summaryResponse);
       setLastUpdate(new Date());
     } catch (err) {
       console.error('Error fetching data:', err);
