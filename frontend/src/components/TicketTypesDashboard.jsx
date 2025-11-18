@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -9,13 +9,18 @@ import {
   Legend,
   ResponsiveContainer,
   Cell,
-  PieChart,
-  Pie,
 } from 'recharts';
+import { ChevronRight, ChevronDown } from 'lucide-react';
 
-const COLORS = ['#667eea', '#dc3545', '#28a745', '#17a2b8', '#fd7e14', '#6f42c1', '#ffc107', '#6c757d'];
+// Blue, purple, and grey color scheme
+const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280', '#9CA3AF'];
 
 const TicketTypesDashboard = ({ tickets, summary, loading }) => {
+  const [selectedTicketType, setSelectedTicketType] = useState(null);
+  const [selectedIssueType, setSelectedIssueType] = useState(null);
+  const [expandedTypes, setExpandedTypes] = useState({});
+  const [selectedPlatform, setSelectedPlatform] = useState('all');
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -26,289 +31,254 @@ const TicketTypesDashboard = ({ tickets, summary, loading }) => {
     );
   }
 
-  // Group tickets by type
-  const typeCounts = {};
-  const typeResolutionTimes = {};
-  
+  // Get unique platforms
+  const platforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])].sort();
+  const platformTotals = {};
   tickets?.data?.forEach((ticket) => {
-    const type = ticket.ticket_type || ticket.type || 'Unknown';
-    typeCounts[type] = (typeCounts[type] || 0) + 1;
-    
-    // Calculate resolution time if available
-    if (ticket.resolution_time) {
-      if (!typeResolutionTimes[type]) {
-        typeResolutionTimes[type] = [];
-      }
-      typeResolutionTimes[type].push(ticket.resolution_time);
-    }
+    const platform = ticket.platform || 'Unknown';
+    platformTotals[platform] = (platformTotals[platform] || 0) + 1;
   });
 
-  const typeData = Object.entries(typeCounts)
-    .map(([name, count]) => {
-      // Calculate average resolution time
-      let avgResolutionTime = 0;
-      if (typeResolutionTimes[name] && typeResolutionTimes[name].length > 0) {
-        const sum = typeResolutionTimes[name].reduce((a, b) => a + b, 0);
-        avgResolutionTime = sum / typeResolutionTimes[name].length;
-      }
+  // Filter tickets by selected platform
+  const filteredTickets = selectedPlatform === 'all'
+    ? tickets?.data || []
+    : tickets?.data?.filter(t => (t.platform || 'Unknown') === selectedPlatform) || [];
 
-      return {
-        name,
-        count,
-        avgResolutionHours: avgResolutionTime > 0 ? (avgResolutionTime / 3600).toFixed(1) : 0,
+  // Build two-level structure: custom_ticket_type -> issue_type
+  const hierarchy = {};
+  filteredTickets.forEach((ticket) => {
+    const ticketType = ticket.custom_ticket_type || 'Unknown';
+    const issueType = ticket.issue_type || 'Unknown';
+
+    // Initialize ticket type
+    if (!hierarchy[ticketType]) {
+      hierarchy[ticketType] = {
+        count: 0,
+        issues: {}
       };
-    })
-    .sort((a, b) => b.count - a.count);
-
-  const total = typeData.reduce((sum, item) => sum + item.count, 0);
-
-  // System Access Requests breakdown
-  const systemAccessTypes = {};
-  tickets?.data?.forEach((ticket) => {
-    const type = ticket.ticket_type || ticket.type || '';
-    if (type.toLowerCase().includes('system access') || type.toLowerCase().includes('access')) {
-      const subType = ticket.description || ticket.subject || 'Other';
-      // Extract common access request types from description
-      if (subType.toLowerCase().includes('new user')) {
-        systemAccessTypes['New User'] = (systemAccessTypes['New User'] || 0) + 1;
-      } else if (subType.toLowerCase().includes('transfer')) {
-        systemAccessTypes['Transfer Device'] = (systemAccessTypes['Transfer Device'] || 0) + 1;
-      } else if (subType.toLowerCase().includes('permission')) {
-        systemAccessTypes['Permission Change'] = (systemAccessTypes['Permission Change'] || 0) + 1;
-      } else if (subType.toLowerCase().includes('remove')) {
-        systemAccessTypes['Remove User'] = (systemAccessTypes['Remove User'] || 0) + 1;
-      } else if (subType.toLowerCase().includes('password')) {
-        systemAccessTypes['Password Reset'] = (systemAccessTypes['Password Reset'] || 0) + 1;
-      } else {
-        systemAccessTypes['Other'] = (systemAccessTypes['Other'] || 0) + 1;
-      }
     }
+    hierarchy[ticketType].count++;
+
+    // Initialize issue type
+    if (!hierarchy[ticketType].issues[issueType]) {
+      hierarchy[ticketType].issues[issueType] = 0;
+    }
+    hierarchy[ticketType].issues[issueType]++;
   });
 
-  const systemAccessData = Object.entries(systemAccessTypes)
-    .map(([name, count]) => ({ name, count }))
+  // Convert to sorted arrays
+  const ticketTypes = Object.entries(hierarchy)
+    .map(([name, data]) => ({
+      name,
+      count: data.count,
+      issues: data.issues
+    }))
     .sort((a, b) => b.count - a.count);
+
+  const total = filteredTickets.length || 0;
+
+  const toggleExpanded = (type) => {
+    setExpandedTypes(prev => ({
+      ...prev,
+      [type]: !prev[type]
+    }));
+  };
+
+  // Get issue types for selected ticket type
+  const getIssueTypes = (ticketType) => {
+    if (!ticketType || !hierarchy[ticketType]) return [];
+    return Object.entries(hierarchy[ticketType].issues)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  };
 
   return (
     <div className="space-y-6">
-      {/* Main Ticket Types */}
+      {/* Platform Filter */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-sm font-medium text-gray-700 mb-3">Filter by Platform</h3>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setSelectedPlatform('all')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              selectedPlatform === 'all'
+                ? 'bg-primary-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            All Platforms ({tickets?.data?.length || 0})
+          </button>
+          {platforms.map((platform, index) => (
+            <button
+              key={index}
+              onClick={() => setSelectedPlatform(platform)}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                selectedPlatform === platform
+                  ? 'bg-primary-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {platform} ({platformTotals[platform]})
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Header and Summary */}
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
           <span className="mr-2">📋</span>
-          Ticket Types Overview
+          Ticket Types
+          {selectedPlatform !== 'all' && (
+            <span className="ml-2 text-lg text-primary-600">- {selectedPlatform}</span>
+          )}
         </h2>
 
-        {typeData.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            No ticket type data available
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6">
+            <h3 className="text-sm font-medium text-blue-800 mb-2">Total Tickets</h3>
+            <p className="text-3xl font-bold text-blue-900">{total}</p>
           </div>
-        ) : (
-          <>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6">
-                <h3 className="text-sm font-medium text-blue-800 mb-2">Total Types</h3>
-                <p className="text-3xl font-bold text-blue-900">{typeData.length}</p>
-              </div>
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6">
-                <h3 className="text-sm font-medium text-green-800 mb-2">Most Common</h3>
-                <p className="text-xl font-bold text-green-900">{typeData[0]?.name || 'N/A'}</p>
-                <p className="text-sm text-green-700">{typeData[0]?.count || 0} tickets</p>
-              </div>
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6">
-                <h3 className="text-sm font-medium text-purple-800 mb-2">Total Tickets</h3>
-                <p className="text-3xl font-bold text-purple-900">{total}</p>
-              </div>
-            </div>
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6">
+            <h3 className="text-sm font-medium text-purple-800 mb-2">Ticket Types</h3>
+            <p className="text-3xl font-bold text-purple-900">{ticketTypes.length}</p>
+          </div>
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6">
+            <h3 className="text-sm font-medium text-green-800 mb-2">Most Common</h3>
+            <p className="text-xl font-bold text-green-900">{ticketTypes[0]?.name || 'N/A'}</p>
+            <p className="text-sm text-green-700">{ticketTypes[0]?.count || 0} tickets</p>
+          </div>
+        </div>
 
-            {/* Horizontal Bar Chart */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-700 mb-4">Ticket Type Distribution</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={typeData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={150} />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const percentage = ((payload[0].value / total) * 100).toFixed(1);
-                        return (
-                          <div className="bg-white p-4 border border-gray-200 rounded shadow-lg">
-                            <p className="font-semibold text-gray-900">{payload[0].payload.name}</p>
-                            <p className="text-primary-600">
-                              {payload[0].value} tickets ({percentage}%)
-                            </p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="count" name="Tickets">
-                    {typeData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Pie Chart */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-700 mb-4">Type Distribution</h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={typeData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="count"
-                  >
-                    {typeData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Resolution Time Chart */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-700 mb-4">
-                Average Resolution Time by Type (Hours)
-              </h3>
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={typeData.filter((t) => t.avgResolutionHours > 0)} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" label={{ value: 'Hours', position: 'insideBottom', offset: -5 }} />
-                  <YAxis dataKey="name" type="category" width={150} />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        return (
-                          <div className="bg-white p-4 border border-gray-200 rounded shadow-lg">
-                            <p className="font-semibold text-gray-900">{payload[0].payload.name}</p>
-                            <p className="text-primary-600">
-                              Avg: {payload[0].value} hours
-                            </p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Bar dataKey="avgResolutionHours" name="Avg Hours" fill="#667eea" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Type Table */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-700 mb-4">Type Breakdown</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Count
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Percentage
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Avg Resolution (hrs)
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Visual
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {typeData.map((type, index) => {
-                      const percentage = ((type.count / total) * 100).toFixed(1);
-                      return (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div
-                                className="w-3 h-3 rounded-full mr-3"
-                                style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                              ></div>
-                              <span className="text-sm font-medium text-gray-900">{type.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-                            {type.count}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {percentage}%
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {type.avgResolutionHours > 0 ? type.avgResolutionHours : 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div
-                                className="h-2 rounded-full"
-                                style={{
-                                  width: `${percentage}%`,
-                                  backgroundColor: COLORS[index % COLORS.length],
-                                }}
-                              ></div>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        )}
+        {/* Bar Chart - Ticket Types */}
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold text-gray-700 mb-4">Ticket Types</h3>
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart data={ticketTypes} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" />
+              <YAxis dataKey="name" type="category" width={200} />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const percentage = ((payload[0].value / total) * 100).toFixed(1);
+                    return (
+                      <div className="bg-white p-4 border border-gray-200 rounded shadow-lg">
+                        <p className="font-semibold text-gray-900">{payload[0].payload.name}</p>
+                        <p className="text-primary-600">
+                          {payload[0].value} tickets ({percentage}%)
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Bar dataKey="count" radius={[0, 8, 8, 0]}>
+                {ticketTypes.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
-      {/* System Access Requests Breakdown */}
-      {systemAccessData.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-            <span className="mr-2">🔐</span>
-            System Access Requests
-          </h2>
+      {/* Expandable Ticket Breakdown Table */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-semibold text-gray-700 mb-4">Ticket Breakdown</h3>
+        <div className="space-y-2">
+          {ticketTypes.map((ticketType, index) => {
+            const isExpanded = expandedTypes[ticketType.name];
+            const issueTypes = getIssueTypes(ticketType.name);
+            const percentage = ((ticketType.count / total) * 100).toFixed(1);
 
-          <div className="mb-6">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={systemAccessData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis dataKey="name" type="category" width={120} />
-                <Tooltip />
-                <Bar dataKey="count" name="Requests" fill="#667eea" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+            return (
+              <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
+                {/* Ticket Type */}
+                <div
+                  onClick={() => toggleExpanded(ticketType.name)}
+                  className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    {isExpanded ? (
+                      <ChevronDown className="w-5 h-5 text-gray-600" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5 text-gray-600" />
+                    )}
+                    <div
+                      className="w-4 h-4 rounded-full"
+                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                    ></div>
+                    <span className="font-semibold text-gray-900">{ticketType.name}</span>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <span className="text-sm text-gray-600">{percentage}%</span>
+                    <span className="font-semibold text-gray-900">{ticketType.count} tickets</span>
+                  </div>
+                </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {systemAccessData.map((item, index) => (
-              <div
-                key={index}
-                className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border border-gray-200"
-              >
-                <h4 className="text-sm font-medium text-gray-700 mb-2">{item.name}</h4>
-                <p className="text-2xl font-bold text-gray-900">{item.count}</p>
+                {/* Issue Types (shown when expanded) */}
+                {isExpanded && (
+                  <div className="bg-white">
+                    {issueTypes.map((issueType, issueIndex) => {
+                      const issuePercentage = ((issueType.count / ticketType.count) * 100).toFixed(1);
+
+                      return (
+                        <div key={issueIndex} className="border-t border-gray-200">
+                          <div className="flex items-center justify-between p-4 pl-12 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-center space-x-3">
+                              <span className="text-gray-700 font-medium">{issueType.name}</span>
+                            </div>
+                            <div className="flex items-center space-x-4">
+                              <span className="text-sm text-gray-500">{issuePercentage}% of type</span>
+                              <span className="font-medium text-gray-700">{issueType.count} tickets</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Selected View - Detail Charts */}
+      {selectedTicketType && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-700 mb-4">
+            Level 2: Issue Types for "{selectedTicketType}"
+          </h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={getIssueTypes(selectedTicketType)} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" />
+              <YAxis dataKey="name" type="category" width={180} />
+              <Tooltip />
+              <Bar dataKey="count" name="Tickets" fill="#8B5CF6" radius={[0, 8, 8, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {selectedTicketType && selectedIssueType && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-700 mb-4">
+            Level 3: Type Details for "{selectedTicketType}" → "{selectedIssueType}"
+          </h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={getTypeDetails(selectedTicketType, selectedIssueType)} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" />
+              <YAxis dataKey="name" type="category" width={200} />
+              <Tooltip />
+              <Bar dataKey="count" name="Tickets" fill="#6366F1" radius={[0, 8, 8, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       )}
     </div>

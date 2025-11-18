@@ -65,41 +65,59 @@ def check_freshdesk_config():
     domain = os.environ.get('FRESHDESK_DOMAIN')
     return bool(api_key) and bool(domain)
 
-def fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=10):
+def fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=None):
     """
     Fetch all pages from Freshdesk API with pagination support
-    Freshdesk returns max 30 results per page and uses Link header for pagination
+    Freshdesk returns max 100 per page. Uses Link header for pagination.
+
+    Args:
+        max_pages: Maximum pages to fetch. None = unlimited (fetch all available data)
     """
     all_tickets = []
     page = 1
 
-    while page <= max_pages:
+    while True:
+        # Check max_pages limit if set
+        if max_pages is not None and page > max_pages:
+            logging.info(f"Reached max_pages limit ({max_pages}). Total tickets: {len(all_tickets)}")
+            break
+
         # Add page parameter
         page_params = {**params, 'page': page, 'per_page': 100}  # Request 100 per page (Freshdesk max)
 
-        logging.info(f"Fetching page {page} from Freshdesk...")
-        response = requests.get(base_url, headers=headers, params=page_params, timeout=30)
-        response.raise_for_status()
+        logging.info(f"📄 Fetching page {page} from Freshdesk...")
+        try:
+            response = requests.get(base_url, headers=headers, params=page_params, timeout=45)
+            response.raise_for_status()
+        except requests.exceptions.Timeout:
+            logging.error(f"⏱️ Timeout on page {page}. Returning {len(all_tickets)} tickets.")
+            break
+        except requests.exceptions.RequestException as e:
+            logging.error(f"❌ Error on page {page}: {e}. Returning {len(all_tickets)} tickets.")
+            break
 
         page_data = response.json()
 
-        if not page_data:
-            # No more data
-            logging.info(f"No more data on page {page}. Total tickets fetched: {len(all_tickets)}")
+        if not page_data or len(page_data) == 0:
+            logging.info(f"✅ No more data on page {page}. Total: {len(all_tickets)} tickets")
             break
 
         all_tickets.extend(page_data)
-        logging.info(f"Page {page}: fetched {len(page_data)} tickets. Total so far: {len(all_tickets)}")
+        logging.info(f"✅ Page {page}: +{len(page_data)} tickets | Total: {len(all_tickets)}")
 
-        # Check if there are more pages
-        # Freshdesk includes Link header with next page URL
+        # Check Link header for next page
         link_header = response.headers.get('Link', '')
         if 'rel="next"' not in link_header:
-            logging.info(f"No more pages. Total tickets fetched: {len(all_tickets)}")
+            logging.info(f"🏁 Last page reached. Total: {len(all_tickets)} tickets")
             break
 
         page += 1
 
+        # Warning for very large datasets
+        if page > 100:
+            logging.warning(f"⚠️ Fetching page {page} (10,000+ tickets)...")
+
+    logging.info(f"🎉 Complete! {len(all_tickets)} tickets from {page} pages")
     return all_tickets
 
 def get_custom_field_value(custom_fields, field_prefix):
@@ -136,7 +154,9 @@ def process_ticket(ticket, domain):
 
     ticket['platform'] = get_custom_field_value(cf, 'cf_platform') or 'Unknown'
     ticket['league'] = get_custom_field_value(cf, 'cf_league') or 'Unknown'
+    ticket['custom_ticket_type'] = get_custom_field_value(cf, 'cf_ticket_type') or 'Unknown'
     ticket['issue_type'] = get_custom_field_value(cf, 'cf_issue_type') or 'Unknown'
+    ticket['type_detail'] = get_custom_field_value(cf, 'cf_description') or 'Unknown'
     ticket['dev_assistance_needed'] = get_custom_field_value(cf, 'cf_dev_assistance_needed') or False
 
     # Add Freshdesk URL
@@ -213,6 +233,7 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
     priority_filter = req.params.get('priority')
     platform_filter = req.params.get('platform')
     league_filter = req.params.get('league')
+    group_id_filter = req.params.get('group_id')
 
     # Build Freshdesk API URL
     base_url = f"https://{domain}.freshdesk.com/api/v2/tickets"
@@ -244,6 +265,9 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
 
         # Apply client-side filters
         filtered_tickets = processed_tickets
+
+        if group_id_filter:
+            filtered_tickets = [t for t in filtered_tickets if str(t.get('group_id')) == group_id_filter]
 
         if status_filter:
             filtered_tickets = [t for t in filtered_tickets if str(t.get('status')) == status_filter]
@@ -318,10 +342,19 @@ def ticket(req: func.HttpRequest) -> func.HttpResponse:
         conv_response.raise_for_status()
         conversations = conv_response.json()
 
+        # Count agent interactions (responses from agents, not customers)
+        agent_interactions_count = len([
+            conv for conv in conversations
+            if conv.get('user_id') is not None  # Agent response
+            and not conv.get('private', False)  # Exclude private notes
+        ])
+        logging.info(f"💬 Ticket {ticket_id} has {agent_interactions_count} agent interactions")
+
         # Combine data
         result = {
             "ticket": processed_ticket,
-            "conversations": conversations
+            "conversations": conversations,
+            "agent_interactions_count": agent_interactions_count
         }
 
         return func.HttpResponse(
@@ -369,14 +402,15 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
     domain = os.environ.get('FRESHDESK_DOMAIN')
     headers = get_freshdesk_headers()
 
-    # Get date range
+    # Get date range and filters
     start_date = req.params.get('start_date')
     end_date = req.params.get('end_date')
+    group_id_filter = req.params.get('group_id')
 
     # Build Freshdesk API URL
     base_url = f"https://{domain}.freshdesk.com/api/v2/tickets"
 
-    params = {}
+    params = {'include': 'stats'}  # Include stats for agent_responded count
     if start_date:
         params['updated_since'] = start_date
 
@@ -390,14 +424,57 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
             logging.info(f"Using {len(tickets_data)} cached tickets for summary")
         else:
             # Fetch all pages from Freshdesk with pagination
-            logging.info(f"Fetching tickets for summary with pagination: {base_url}")
-            tickets_data = fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=10)
+            logging.info(f"Fetching tickets for summary with pagination (including stats): {base_url}")
+            tickets_data = fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=None)
             logging.info(f"Fetched total of {len(tickets_data)} tickets for summary")
 
             # Cache the results
             set_in_cache(cache_key, tickets_data)
 
         logging.info(f"Processing {len(tickets_data)} tickets for summary")
+
+        # Apply group_id filter if specified
+        if group_id_filter:
+            tickets_data = [t for t in tickets_data if str(t.get('group_id')) == group_id_filter]
+            logging.info(f"Filtered to {len(tickets_data)} tickets for group_id {group_id_filter}")
+
+        # Calculate response times from first_responded_at field
+        response_times = []
+        total_agent_interactions = 0
+
+        for ticket in tickets_data:
+            stats = ticket.get('stats', {})
+
+            # Calculate first response time (from stats.first_responded_at)
+            first_responded_at = stats.get('first_responded_at')
+            created_at = ticket.get('created_at')
+
+            if first_responded_at and created_at:
+                try:
+                    created = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    responded = datetime.fromisoformat(first_responded_at.replace('Z', '+00:00'))
+                    response_time_seconds = (responded - created).total_seconds()
+                    if response_time_seconds > 0:  # Only count positive values
+                        response_times.append(response_time_seconds)
+                except (ValueError, AttributeError) as e:
+                    logging.warning(f"Error parsing dates for ticket {ticket.get('id')}: {e}")
+
+            # Count agent interactions (count tickets where agent responded at least once)
+            # Since there's no agent_responded count field, we count tickets with agent_responded_at
+            if stats.get('agent_responded_at'):
+                total_agent_interactions += 1  # At least one agent response per ticket
+
+        # Calculate response time statistics
+        avg_response_time = None
+        median_response_time = None
+        if response_times:
+            avg_response_time = sum(response_times) / len(response_times)
+            sorted_times = sorted(response_times)
+            mid = len(sorted_times) // 2
+            median_response_time = sorted_times[mid] if len(sorted_times) % 2 else (sorted_times[mid-1] + sorted_times[mid]) / 2
+            logging.info(f"📊 Calculated response times - Avg: {avg_response_time/3600:.2f}h, Median: {median_response_time/3600:.2f}h from {len(response_times)} tickets")
+
+        logging.info(f"💬 Total agent interactions: {total_agent_interactions} across {len(tickets_data)} tickets")
 
         # Calculate summary statistics (structured for frontend compatibility)
         total_count = len(tickets_data)
@@ -415,10 +492,11 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
                     "resolved_change": 0   # TODO: Calculate vs previous period
                 },
                 "response_time": {
-                    "first": None,  # TODO: Calculate from ticket data
-                    "average": None
+                    "first": avg_response_time,  # Average first response time in seconds
+                    "average": avg_response_time,  # Same as first for now
+                    "median": median_response_time  # Median response time (more accurate)
                 },
-                "agent_interactions": 0,  # TODO: Calculate from conversations data
+                "agent_interactions": total_agent_interactions,  # Total agent responses across all tickets
                 "priorities": {
                     "high": len([t for t in tickets_data if t.get('priority') >= 3]),
                     "urgent": len([t for t in tickets_data if t.get('priority') == 4]),

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -14,10 +14,12 @@ import {
 } from 'recharts';
 import { parseISO, getDay, format } from 'date-fns';
 
-const COLORS = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#fee140'];
+// Blue, purple, and grey color scheme
+const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280'];
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const DayOfWeekDashboard = ({ tickets, loading }) => {
+  const [selectedPlatform, setSelectedPlatform] = useState('all');
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -28,11 +30,24 @@ const DayOfWeekDashboard = ({ tickets, loading }) => {
     );
   }
 
+  // Get unique platforms
+  const platforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])].sort();
+  const platformTotals = {};
+  tickets?.data?.forEach((ticket) => {
+    const platform = ticket.platform || 'Unknown';
+    platformTotals[platform] = (platformTotals[platform] || 0) + 1;
+  });
+
+  // Filter tickets by selected platform
+  const filteredTickets = selectedPlatform === 'all'
+    ? tickets?.data || []
+    : tickets?.data?.filter(t => (t.platform || 'Unknown') === selectedPlatform) || [];
+
   // Initialize day counts
   const dayCounts = Array(7).fill(0);
 
   // Count tickets by day of week
-  tickets?.data?.forEach((ticket) => {
+  filteredTickets.forEach((ticket) => {
     if (ticket.created_at) {
       try {
         const date = parseISO(ticket.created_at);
@@ -57,10 +72,43 @@ const DayOfWeekDashboard = ({ tickets, loading }) => {
 
   return (
     <div className="space-y-6">
+      {/* Platform Filter */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-sm font-medium text-gray-700 mb-3">Filter by Platform</h3>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setSelectedPlatform('all')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              selectedPlatform === 'all'
+                ? 'bg-primary-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            All Platforms ({tickets?.data?.length || 0})
+          </button>
+          {platforms.map((platform, index) => (
+            <button
+              key={index}
+              onClick={() => setSelectedPlatform(platform)}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                selectedPlatform === platform
+                  ? 'bg-primary-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {platform} ({platformTotals[platform]})
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
           <span className="mr-2">📅</span>
           Tickets by Day of Week
+          {selectedPlatform !== 'all' && (
+            <span className="ml-2 text-lg text-primary-600">- {selectedPlatform}</span>
+          )}
         </h2>
 
         {total === 0 ? (
@@ -111,7 +159,7 @@ const DayOfWeekDashboard = ({ tickets, loading }) => {
                     }}
                   />
                   <Legend />
-                  <Bar dataKey="count" name="Tickets">
+                  <Bar dataKey="count" name="Tickets" radius={[8, 8, 0, 0]}>
                     {dayData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}

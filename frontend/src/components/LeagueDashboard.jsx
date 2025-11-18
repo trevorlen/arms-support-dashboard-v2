@@ -5,7 +5,7 @@ import { ExternalLink } from 'lucide-react';
 const COLORS = ['#667eea', '#dc3545', '#28a745', '#ffc107', '#17a2b8', '#6f42c1'];
 
 const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
-  const [selectedPlatform, setSelectedPlatform] = useState('all');
+  const [selectedPlatform, setSelectedPlatform] = useState(null);
 
   const getStatusColor = (status) => {
     const colors = {
@@ -44,11 +44,11 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
 
   // Get list of platforms
   const platforms = Object.keys(platformLeagueCounts).sort();
-  
+
   // Filter tickets by selected platform
-  const filteredTickets = selectedPlatform === 'all' 
-    ? tickets?.data 
-    : tickets?.data?.filter(t => (t.platform || 'Unknown') === selectedPlatform);
+  const filteredTickets = selectedPlatform
+    ? tickets?.data?.filter(t => (t.platform || 'Unknown') === selectedPlatform)
+    : [];
 
   // Group tickets by league (filtered by platform)
   const leagueCounts = {};
@@ -65,6 +65,9 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
     .sort((a, b) => b.count - a.count);
 
   const total = leagueData.reduce((sum, item) => sum + item.count, 0);
+
+  // Check if there's only one unique league in the filtered results
+  const hasOnlyOneLeague = leagueData.length === 1;
 
   // Get breakdown by status for each league (filtered)
   const leagueStatusBreakdown = {};
@@ -91,16 +94,6 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">Filter by Platform</h3>
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setSelectedPlatform('all')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              selectedPlatform === 'all'
-                ? 'bg-primary-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            All Platforms ({tickets?.data?.length || 0})
-          </button>
           {platforms.map((platform, index) => (
             <button
               key={index}
@@ -117,22 +110,107 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-          <span className="mr-2">🏆</span>
-          Tickets by League
-          {selectedPlatform !== 'all' && (
-            <span className="ml-2 text-lg font-normal text-gray-600">
-              ({selectedPlatform})
-            </span>
-          )}
-        </h2>
-
-        {leagueData.length === 0 ? (
+      {!selectedPlatform ? (
+        <div className="bg-white rounded-lg shadow p-6">
           <div className="text-center py-12 text-gray-500">
-            No league data available
+            <span className="text-4xl mb-4 block">🏆</span>
+            <p className="text-lg">Please select a platform to view league data</p>
           </div>
-        ) : (
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+            <span className="mr-2">🏆</span>
+            Tickets by League
+            {selectedPlatform && (
+              <span className="ml-2 text-lg font-normal text-gray-600">
+                ({selectedPlatform})
+              </span>
+            )}
+          </h2>
+
+          {leagueData.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              No league data available
+            </div>
+          ) : hasOnlyOneLeague ? (
+            <>
+              {/* Show only Recent Tickets when there's only one league */}
+              {onTicketClick && filteredTickets && filteredTickets.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-700 mb-4">
+                    {leagueData[0].name} - Recent Tickets ({filteredTickets.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Ticket #
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Subject
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Created
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {filteredTickets.slice(0, 20).map((ticket) => (
+                          <tr
+                            key={ticket.id}
+                            className="hover:bg-gray-50 cursor-pointer transition-colors"
+                            onClick={() => onTicketClick(ticket.id)}
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary-600">
+                              #{ticket.id}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-900">
+                              <div className="max-w-md truncate">
+                                {ticket.title || ticket.subject}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(ticket.status_name || ticket.status)}`}>
+                                {ticket.status_name || ticket.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {new Date(ticket.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onTicketClick(ticket.id);
+                                }}
+                                className="text-primary-600 hover:text-primary-800 flex items-center space-x-1"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                                <span>View</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {filteredTickets.length > 20 && (
+                    <p className="text-sm text-gray-500 mt-2">
+                      Showing 20 of {filteredTickets.length} tickets
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
           <>
             {/* Bar Chart */}
             <div className="mb-8">
@@ -343,8 +421,9 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
               </div>
             </div>
           </>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

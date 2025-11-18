@@ -7,13 +7,16 @@ import HourOfDayDashboard from './components/HourOfDayDashboard';
 import DayOfWeekDashboard from './components/DayOfWeekDashboard';
 import TicketTypesDashboard from './components/TicketTypesDashboard';
 import PriorityIssueTypeDashboard from './components/PriorityIssueTypeDashboard';
+import DevOpsDashboard from './components/DevOpsDashboard';
 import TicketDetailModal from './components/TicketDetailModal';
+import LoadingIndicator from './components/LoadingIndicator';
 import { getTickets, getSummary, getHealth } from './services/api';
 
 function App() {
   const [activeTab, setActiveTab] = useState('platform');
   const [tickets, setTickets] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [devopsTickets, setDevopsTickets] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dateRange, setDateRange] = useState('last_week');
@@ -58,6 +61,22 @@ function App() {
     }
   };
 
+  const getDateRangeText = () => {
+    const { start_date, end_date } = calculateDateRange(dateRange);
+    const start = new Date(start_date);
+    const end = new Date(end_date);
+
+    const formatDate = (date) => {
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    };
+
+    return `${formatDate(start)} - ${formatDate(end)}`;
+  };
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -70,10 +89,13 @@ function App() {
       // Calculate date range
       const { start_date, end_date } = calculateDateRange(dateRange);
 
-      // Fetch tickets and summary in parallel
+      // ARMS Support Group ID
+      const ARMS_GROUP_ID = '154000130280';
+
+      // Fetch tickets and summary in parallel (filtered by ARMS Support Group)
       const [ticketsResponse, summaryResponse] = await Promise.all([
-        getTickets({ start_date, limit: 10000 }),
-        getSummary({ start_date }),
+        getTickets({ start_date, limit: 10000, group_id: ARMS_GROUP_ID }),
+        getSummary({ start_date, group_id: ARMS_GROUP_ID }),
       ]);
 
       setTickets(ticketsResponse);
@@ -99,6 +121,7 @@ function App() {
     { id: 'dayofweek', name: 'By Day', icon: CalendarDays },
     { id: 'types', name: 'By Type', icon: FileText },
     { id: 'priority', name: 'Priority & Issues', icon: Target },
+    { id: 'devops', name: 'DevOps', icon: BarChart3 },
   ];
 
   return (
@@ -166,6 +189,11 @@ function App() {
               <option value={30}>Last 30 days</option>
               <option value={90}>Last 90 days</option>
             </select>
+            {!loading && (
+              <span className="text-sm text-primary-600 font-medium">
+                {getDateRangeText()}
+              </span>
+            )}
           </div>
           {lastUpdate && (
             <span className="text-sm text-gray-500">
@@ -187,6 +215,8 @@ function App() {
               Try Again
             </button>
           </div>
+        ) : loading ? (
+          <LoadingIndicator dateRange={dateRange} />
         ) : (
           <>
             {/* KPI Cards */}
@@ -224,6 +254,7 @@ function App() {
             {activeTab === 'dayofweek' && <DayOfWeekDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'types' && <TicketTypesDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'priority' && <PriorityIssueTypeDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} />}
+            {activeTab === 'devops' && <DevOpsDashboard devopsTickets={devopsTickets} loading={loading} />}
           </>
         )}
       </main>

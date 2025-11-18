@@ -1,11 +1,11 @@
 import React from 'react';
-import { TrendingUp, AlertTriangle, CheckCircle, Clock, Users, Timer, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { TrendingUp, AlertTriangle, CheckCircle, Clock, Timer, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 const KPICards = ({ stats, loading }) => {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
+        {[1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="bg-white rounded-lg shadow p-6 animate-pulse">
             <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
             <div className="h-8 bg-gray-200 rounded w-1/2"></div>
@@ -27,6 +27,11 @@ const KPICards = ({ stats, loading }) => {
   const createdChange = stats?.tickets?.created_change || 0;
   const resolvedChange = stats?.tickets?.resolved_change || 0;
 
+  // Calculate unresolved tickets (not closed or resolved)
+  const totalTickets = stats?.tickets?.total || 0;
+  const resolvedTickets = stats?.tickets?.resolved || 0;
+  const unresolvedTickets = totalTickets - resolvedTickets;
+
   const cards = [
     {
       title: 'Tickets Created',
@@ -47,20 +52,20 @@ const KPICards = ({ stats, loading }) => {
       change: resolvedChange,
     },
     {
-      title: 'First Response Time',
-      value: formatResponseTime(stats?.response_time?.first || stats?.response_time?.average),
+      title: 'Median Response Time',
+      value: formatResponseTime(stats?.response_time?.median || stats?.response_time?.average),
       icon: Timer,
       color: 'purple',
       bgColor: 'bg-purple-50',
       iconColor: 'text-purple-600',
     },
     {
-      title: 'Agent Interactions',
-      value: stats?.agent_interactions || stats?.total_agent_interactions || 0,
-      icon: Users,
-      color: 'indigo',
-      bgColor: 'bg-indigo-50',
-      iconColor: 'text-indigo-600',
+      title: 'Unresolved Tickets',
+      value: unresolvedTickets,
+      icon: Clock,
+      color: 'yellow',
+      bgColor: 'bg-yellow-50',
+      iconColor: 'text-yellow-600',
     },
     {
       title: 'System Issues',
@@ -70,18 +75,10 @@ const KPICards = ({ stats, loading }) => {
       bgColor: 'bg-red-50',
       iconColor: 'text-red-600',
     },
-    {
-      title: 'Open Tickets',
-      value: stats?.tickets?.open || 0,
-      icon: Clock,
-      color: 'yellow',
-      bgColor: 'bg-yellow-50',
-      iconColor: 'text-yellow-600',
-    },
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
       {cards.map((card, index) => {
         const Icon = card.icon;
         const hasChange = card.change !== undefined && card.change !== null;

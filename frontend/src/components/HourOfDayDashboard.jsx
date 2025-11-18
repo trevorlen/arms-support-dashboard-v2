@@ -1,21 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   Area,
   AreaChart,
 } from 'recharts';
-import { parseISO, getHours, format } from 'date-fns';
+import { parseISO, getHours } from 'date-fns';
 
 const HourOfDayDashboard = ({ tickets, loading }) => {
+  const [selectedPlatform, setSelectedPlatform] = useState('all');
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -26,6 +22,19 @@ const HourOfDayDashboard = ({ tickets, loading }) => {
     );
   }
 
+  // Get unique platforms
+  const platforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])].sort();
+  const platformTotals = {};
+  tickets?.data?.forEach((ticket) => {
+    const platform = ticket.platform || 'Unknown';
+    platformTotals[platform] = (platformTotals[platform] || 0) + 1;
+  });
+
+  // Filter tickets by selected platform
+  const filteredTickets = selectedPlatform === 'all'
+    ? tickets?.data || []
+    : tickets?.data?.filter(t => (t.platform || 'Unknown') === selectedPlatform) || [];
+
   // Group tickets by hour of day
   const hourCounts = Array(24)
     .fill(0)
@@ -34,7 +43,7 @@ const HourOfDayDashboard = ({ tickets, loading }) => {
       return acc;
     }, {});
 
-  tickets?.data?.forEach((ticket) => {
+  filteredTickets.forEach((ticket) => {
     if (ticket.created_at) {
       try {
         const date = parseISO(ticket.created_at);
@@ -78,10 +87,43 @@ const HourOfDayDashboard = ({ tickets, loading }) => {
 
   return (
     <div className="space-y-6">
+      {/* Platform Filter */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-sm font-medium text-gray-700 mb-3">Filter by Platform</h3>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setSelectedPlatform('all')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              selectedPlatform === 'all'
+                ? 'bg-primary-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            All Platforms ({tickets?.data?.length || 0})
+          </button>
+          {platforms.map((platform, index) => (
+            <button
+              key={index}
+              onClick={() => setSelectedPlatform(platform)}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                selectedPlatform === platform
+                  ? 'bg-primary-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {platform} ({platformTotals[platform]})
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
           <span className="mr-2">🕐</span>
           Tickets by Hour of Day
+          {selectedPlatform !== 'all' && (
+            <span className="ml-2 text-lg text-primary-600">- {selectedPlatform}</span>
+          )}
         </h2>
 
         {total === 0 ? (
@@ -143,21 +185,6 @@ const HourOfDayDashboard = ({ tickets, loading }) => {
                     fillOpacity={0.6}
                   />
                 </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Bar Chart */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-700 mb-4">Hourly Distribution</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={hourData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="hourLabel" angle={-45} textAnchor="end" height={100} />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="count" name="Tickets" fill="#667eea" />
-                </BarChart>
               </ResponsiveContainer>
             </div>
 
