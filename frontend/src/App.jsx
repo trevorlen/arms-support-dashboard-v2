@@ -25,6 +25,7 @@ function App() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [apiStatus, setApiStatus] = useState('checking');
   const [selectedTicketId, setSelectedTicketId] = useState(null);
+  const [include2024, setInclude2024] = useState(false);
 
   // Feature flags
   const ENABLE_CHANGE_REQUESTS = false;
@@ -99,8 +100,8 @@ function App() {
 
       // Fetch tickets, summary, and devops items in parallel (filtered by ARMS Support Group)
       const [ticketsResponse, summaryResponse, devopsResponse] = await Promise.all([
-        getTickets({ start_date, limit: 10000, group_id: ARMS_GROUP_ID }),
-        getSummary({ start_date, group_id: ARMS_GROUP_ID }),
+        getTickets({ start_date, limit: 10000, group_id: ARMS_GROUP_ID, include_2024: include2024 }),
+        getSummary({ start_date, group_id: ARMS_GROUP_ID, include_2024: include2024 }),
         getDevOpsItems(),
       ]);
 
@@ -119,7 +120,7 @@ function App() {
 
   useEffect(() => {
     fetchData();
-  }, [dateRange]);
+  }, [dateRange, include2024]);
 
   const tabs = [
     { id: 'platform', name: 'By Platform', icon: BarChart3 },
@@ -189,33 +190,54 @@ function App() {
 
       {/* Date Range Selector */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Calendar className="w-5 h-5 text-gray-500" />
-            <span className="text-sm font-medium text-gray-700">Date Range:</span>
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            >
-              <option value="last_week">Last Week (Sun-Sun)</option>
-              <option value={1}>Last 24 hours</option>
-              <option value={7}>Last 7 days</option>
-              <option value={14}>Last 14 days</option>
-              <option value={30}>Last 30 days</option>
-              <option value={90}>Last 90 days</option>
-            </select>
-            {!loading && (
-              <span className="text-sm text-primary-600 font-medium">
-                {getDateRangeText()}
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center space-x-4">
+                <Calendar className="w-5 h-5 text-gray-500" />
+                <span className="text-sm font-medium text-gray-700">Date Range:</span>
+                <select
+                  value={dateRange}
+                  onChange={(e) => setDateRange(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="last_week">Last Week (Sun-Sun)</option>
+                  <option value={1}>Last 24 hours</option>
+                  <option value={7}>Last 7 days</option>
+                  <option value={14}>Last 14 days</option>
+                  <option value={30}>Last 30 days</option>
+                  <option value={90}>Last 90 days</option>
+                </select>
+                {!loading && (
+                  <span className="text-sm text-primary-600 font-medium">
+                    {getDateRangeText()}
+                  </span>
+                )}
+              </div>
+
+              {/* Include 2024 Tickets Checkbox */}
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={include2024}
+                  onChange={(e) => setInclude2024(e.target.checked)}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Include 2024 Tickets</span>
+              </label>
+              {include2024 && (
+                <span className="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded">
+                  Historical data included
+                </span>
+              )}
+            </div>
+
+            {lastUpdate && (
+              <span className="text-sm text-gray-500">
+                Last updated: {lastUpdate.toLocaleTimeString()}
               </span>
             )}
           </div>
-          {lastUpdate && (
-            <span className="text-sm text-gray-500">
-              Last updated: {lastUpdate.toLocaleTimeString()}
-            </span>
-          )}
         </div>
       </div>
 

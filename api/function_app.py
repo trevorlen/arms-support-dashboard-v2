@@ -15,21 +15,23 @@ app = func.FunctionApp()
 # Cache Configuration
 # ============================================================================
 
-# Simple in-memory cache with TTL (5 minutes)
+# Simple in-memory cache with TTL
 _cache = {}
-CACHE_TTL = 300  # 5 minutes in seconds
+CACHE_TTL_CURRENT = 300  # 5 minutes for current year tickets
+CACHE_TTL_HISTORICAL = 86400  # 24 hours for historical (2024) tickets
 
-def get_cache_key(url, params):
-    """Generate cache key from URL and params"""
-    cache_str = f"{url}_{json.dumps(params, sort_keys=True)}"
+def get_cache_key(url, params, include_historical=False):
+    """Generate cache key from URL and params with historical flag"""
+    cache_str = f"{url}_{json.dumps(params, sort_keys=True)}_historical_{include_historical}"
     return hashlib.md5(cache_str.encode()).hexdigest()
 
-def get_from_cache(cache_key):
+def get_from_cache(cache_key, ttl=None):
     """Get data from cache if not expired"""
     if cache_key in _cache:
         data, timestamp = _cache[cache_key]
-        if time() - timestamp < CACHE_TTL:
-            logging.info(f"Cache HIT for key: {cache_key[:8]}...")
+        cache_ttl = ttl if ttl is not None else CACHE_TTL_CURRENT
+        if time() - timestamp < cache_ttl:
+            logging.info(f"Cache HIT for key: {cache_key[:8]}... (TTL: {cache_ttl}s)")
             return data
         else:
             # Expired, remove from cache
@@ -238,6 +240,7 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
     platform_filter = req.params.get('platform')
     league_filter = req.params.get('league')
     group_id_filter = req.params.get('group_id')
+    include_2024 = req.params.get('include_2024', 'false').lower() == 'true'  # Default: don't include 2024
 
     # Build Freshdesk API URL
     base_url = f"https://{domain}.freshdesk.com/api/v2/tickets"
@@ -246,20 +249,27 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
     # NOTE: Freshdesk /api/v2/tickets doesn't support created_at filtering directly
     # We'll fetch tickets and filter by created_at on the server side
     params = {}
-    # Use a reasonable lookback period to get all tickets we might need
-    # This ensures we capture all tickets that could match our date range
-    if start_date:
+
+    # Determine date range for fetching
+    # If include_2024 is true, fetch from Jan 1, 2024; otherwise fetch recent tickets only
+    if include_2024:
+        # Fetch all tickets since Jan 1, 2024 to capture historical data
+        params['updated_since'] = '2024-01-01T00:00:00Z'
+        logging.info("📅 Including 2024 tickets - fetching since Jan 1, 2024")
+    elif start_date:
         # Use updated_since as a broad filter, then filter by created_at more precisely below
         params['updated_since'] = start_date
+        logging.info(f"📅 Current year only - fetching since {start_date}")
 
     try:
-        # Check cache first
-        cache_key = get_cache_key(base_url, params)
-        cached_data = get_from_cache(cache_key)
+        # Check cache first with appropriate TTL
+        cache_key = get_cache_key(base_url, params, include_historical=include_2024)
+        cache_ttl = CACHE_TTL_HISTORICAL if include_2024 else CACHE_TTL_CURRENT
+        cached_data = get_from_cache(cache_key, ttl=cache_ttl)
 
         if cached_data is not None:
             tickets_data = cached_data
-            logging.info(f"Using {len(tickets_data)} cached tickets")
+            logging.info(f"Using {len(tickets_data)} cached tickets (include_2024={include_2024}, TTL={cache_ttl}s)")
         else:
             # Fetch all pages from Freshdesk with pagination
             # Increased max_pages to capture more tickets since we're filtering by created_at, not updated_at
@@ -276,9 +286,23 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
         # Apply client-side filters
         filtered_tickets = processed_tickets
 
+        # Filter by year first - exclude 2024 tickets unless explicitly requested
+        from datetime import datetime
+        if not include_2024:
+            try:
+                original_count = len(filtered_tickets)
+                filtered_tickets = [
+                    t for t in filtered_tickets
+                    if t.get('created_at') and datetime.fromisoformat(t['created_at'].replace('Z', '+00:00')).year >= 2025
+                ]
+                excluded_2024 = original_count - len(filtered_tickets)
+                logging.info(f"🚫 Excluded {excluded_2024} tickets from 2024 (include_2024=false)")
+                logging.info(f"Filtered to {len(filtered_tickets)} tickets from 2025+")
+            except Exception as e:
+                logging.warning(f"Could not filter by year: {e}")
+
         # Filter by created_at date range (most important - filter by creation, not update)
         if start_date:
-            from datetime import datetime
             try:
                 start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
                 filtered_tickets = [
@@ -290,7 +314,6 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
                 logging.warning(f"Could not parse start_date for filtering: {e}")
 
         if end_date:
-            from datetime import datetime
             try:
                 end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
                 filtered_tickets = [
@@ -442,26 +465,34 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
     start_date = req.params.get('start_date')
     end_date = req.params.get('end_date')
     group_id_filter = req.params.get('group_id')
+    include_2024 = req.params.get('include_2024', 'false').lower() == 'true'
 
     # Build Freshdesk API URL
     base_url = f"https://{domain}.freshdesk.com/api/v2/tickets"
 
     params = {'include': 'stats'}  # Include stats for agent_responded count
-    if start_date:
+
+    # Determine date range for fetching
+    if include_2024:
+        params['updated_since'] = '2024-01-01T00:00:00Z'
+        logging.info("📅 Summary: Including 2024 tickets - fetching since Jan 1, 2024")
+    elif start_date:
         params['updated_since'] = start_date
+        logging.info(f"📅 Summary: Current year only - fetching since {start_date}")
 
     try:
-        # Check cache first
-        cache_key = get_cache_key(base_url, params)
-        cached_data = get_from_cache(cache_key)
+        # Check cache first with appropriate TTL
+        cache_key = get_cache_key(base_url, params, include_historical=include_2024)
+        cache_ttl = CACHE_TTL_HISTORICAL if include_2024 else CACHE_TTL_CURRENT
+        cached_data = get_from_cache(cache_key, ttl=cache_ttl)
 
         if cached_data is not None:
             tickets_data = cached_data
-            logging.info(f"Using {len(tickets_data)} cached tickets for summary")
+            logging.info(f"Using {len(tickets_data)} cached tickets for summary (include_2024={include_2024})")
         else:
             # Fetch all pages from Freshdesk with pagination
             logging.info(f"Fetching tickets for summary with pagination (including stats): {base_url}")
-            tickets_data = fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=None)
+            tickets_data = fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=50)
             logging.info(f"Fetched total of {len(tickets_data)} tickets for summary")
 
             # Cache the results
@@ -473,6 +504,21 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
         if group_id_filter:
             tickets_data = [t for t in tickets_data if str(t.get('group_id')) == group_id_filter]
             logging.info(f"Filtered to {len(tickets_data)} tickets for group_id {group_id_filter}")
+
+        # Filter by year - exclude 2024 tickets unless explicitly requested
+        from datetime import datetime
+        if not include_2024:
+            try:
+                original_count = len(tickets_data)
+                tickets_data = [
+                    t for t in tickets_data
+                    if t.get('created_at') and datetime.fromisoformat(t['created_at'].replace('Z', '+00:00')).year >= 2025
+                ]
+                excluded_2024 = original_count - len(tickets_data)
+                logging.info(f"🚫 Summary: Excluded {excluded_2024} tickets from 2024")
+                logging.info(f"Summary: Processing {len(tickets_data)} tickets from 2025+")
+            except Exception as e:
+                logging.warning(f"Could not filter summary by year: {e}")
 
         # Calculate response times from first_responded_at field
         response_times = []
