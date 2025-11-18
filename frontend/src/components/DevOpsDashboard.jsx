@@ -31,11 +31,15 @@ const DevOpsDashboard = ({ devopsTickets, loading }) => {
       'Bug': 'bg-red-100 text-red-800',
       'Task': 'bg-blue-100 text-blue-800',
       'User Story': 'bg-purple-100 text-purple-800',
+      'Product Backlog Item': 'bg-purple-100 text-purple-800',
       'Feature': 'bg-indigo-100 text-indigo-800',
       'Issue': 'bg-orange-100 text-orange-800',
     };
     return typeColors[type] || 'bg-gray-100 text-gray-800';
   };
+
+  // Get Freshdesk domain for ticket links
+  const freshdeskDomain = 'arms.freshdesk.com';
 
   return (
     <div className="space-y-6">
@@ -77,6 +81,9 @@ const DevOpsDashboard = ({ devopsTickets, loading }) => {
                     Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Assigned To
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Linked FD Ticket
                   </th>
                 </tr>
@@ -98,7 +105,7 @@ const DevOpsDashboard = ({ devopsTickets, loading }) => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(ticket.createdDate).toLocaleDateString('en-US', {
+                      {new Date(ticket.created_date).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
                         year: 'numeric'
@@ -110,24 +117,27 @@ const DevOpsDashboard = ({ devopsTickets, loading }) => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getWorkItemTypeColor(ticket.workItemType)}`}>
-                        {ticket.workItemType}
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getWorkItemTypeColor(ticket.work_item_type)}`}>
+                        {ticket.work_item_type}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ticket.status)}`}>
-                        {ticket.status}
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ticket.state)}`}>
+                        {ticket.state}
                       </span>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {ticket.assigned_to || 'Unassigned'}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {ticket.linkedFDTicket ? (
+                      {ticket.freshdesk_ticket_id ? (
                         <a
-                          href={ticket.linkedFDTicket.url}
+                          href={`https://${freshdeskDomain}/a/tickets/${ticket.freshdesk_ticket_id}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 hover:text-blue-800 flex items-center"
                         >
-                          #{ticket.linkedFDTicket.id}
+                          #{ticket.freshdesk_ticket_id}
                           <ExternalLink className="w-3 h-3 ml-1" />
                         </a>
                       ) : (

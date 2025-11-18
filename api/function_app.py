@@ -564,3 +564,149 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json",
             status_code=500
         )
+
+# ============================================================================
+# Azure DevOps Work Items Endpoint
+# ============================================================================
+
+@app.route(route="devops", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
+def get_devops_items(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Fetch Azure DevOps work items tagged with 'ProdSupport'
+    Returns: List of work items with ID, date, title, type, status, and linked FD ticket
+    """
+    logging.info("Fetching Azure DevOps work items")
+
+    # Check for Azure DevOps credentials
+    org = os.environ.get('AZURE_DEVOPS_ORG')
+    project = os.environ.get('AZURE_DEVOPS_PROJECT')
+    pat = os.environ.get('AZURE_DEVOPS_PAT')
+
+    if not all([org, project, pat]):
+        logging.warning("Azure DevOps credentials not configured")
+        return func.HttpResponse(
+            body=json.dumps({"error": "Azure DevOps credentials not configured"}),
+            mimetype="application/json",
+            status_code=500
+        )
+
+    try:
+        # Azure DevOps API setup
+        base_url = f"https://dev.azure.com/{org}/{project}/_apis"
+        auth = ('', pat)  # Username is empty for PAT authentication
+        headers = {'Content-Type': 'application/json'}
+
+        # WIQL query to get work items with ProdSupport tag
+        wiql_query = {
+            "query": """
+                SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType],
+                       [System.CreatedDate], [System.Tags], [Custom.FreshdeskLink], [System.AssignedTo]
+                FROM WorkItems
+                WHERE [System.Tags] CONTAINS 'ProdSupport'
+                  AND [System.WorkItemType] IN ('Bug', 'Task', 'Product Backlog Item')
+                  AND [System.State] NOT IN ('Done', 'Removed')
+                ORDER BY [System.CreatedDate] DESC
+            """
+        }
+
+        # Execute WIQL query
+        wiql_url = f"{base_url}/wit/wiql?api-version=7.0"
+        logging.info(f"Querying Azure DevOps: {wiql_url}")
+
+        wiql_response = requests.post(
+            wiql_url,
+            auth=auth,
+            headers=headers,
+            json=wiql_query,
+            timeout=30
+        )
+        wiql_response.raise_for_status()
+        wiql_data = wiql_response.json()
+
+        work_item_ids = [item['id'] for item in wiql_data.get('workItems', [])]
+        logging.info(f"Found {len(work_item_ids)} work items with ProdSupport tag")
+
+        if not work_item_ids:
+            return func.HttpResponse(
+                body=json.dumps({
+                    "success": True,
+                    "data": [],
+                    "count": 0
+                }),
+                mimetype="application/json",
+                status_code=200
+            )
+
+        # Get full work item details (batch request)
+        # Azure DevOps API allows max 200 IDs per batch
+        all_work_items = []
+        batch_size = 200
+
+        for i in range(0, len(work_item_ids), batch_size):
+            batch_ids = work_item_ids[i:i + batch_size]
+            ids_param = ','.join(map(str, batch_ids))
+
+            details_url = f"{base_url}/wit/workitems?ids={ids_param}&fields=System.Id,System.Title,System.State,System.WorkItemType,System.CreatedDate,System.Tags,Custom.FreshdeskLink,System.AssignedTo&api-version=7.0"
+
+            details_response = requests.get(
+                details_url,
+                auth=auth,
+                headers=headers,
+                timeout=30
+            )
+            details_response.raise_for_status()
+            batch_items = details_response.json().get('value', [])
+            all_work_items.extend(batch_items)
+
+        # Process and format work items
+        processed_items = []
+        for item in all_work_items:
+            fields = item.get('fields', {})
+
+            # Extract Freshdesk ticket ID from Custom.FreshdeskLink
+            freshdesk_link = fields.get('Custom.FreshdeskLink', '')
+            freshdesk_ticket_id = freshdesk_link if freshdesk_link else None
+
+            # Extract assigned user (System.AssignedTo is an object with displayName)
+            assigned_to_obj = fields.get('System.AssignedTo', {})
+            assigned_to = assigned_to_obj.get('displayName', 'Unassigned') if assigned_to_obj else 'Unassigned'
+
+            processed_item = {
+                'id': item.get('id'),
+                'title': fields.get('System.Title', 'Untitled'),
+                'work_item_type': fields.get('System.WorkItemType', 'Unknown'),
+                'state': fields.get('System.State', 'Unknown'),
+                'created_date': fields.get('System.CreatedDate'),
+                'tags': fields.get('System.Tags', ''),
+                'freshdesk_ticket_id': freshdesk_ticket_id,
+                'assigned_to': assigned_to,
+                'url': f"https://dev.azure.com/{org}/{project}/_workitems/edit/{item.get('id')}"
+            }
+            processed_items.append(processed_item)
+
+        logging.info(f"Successfully processed {len(processed_items)} DevOps work items")
+
+        return func.HttpResponse(
+            body=json.dumps({
+                "success": True,
+                "data": processed_items,
+                "count": len(processed_items)
+            }),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Failed to fetch DevOps items: {str(e)}")
+        return func.HttpResponse(
+            body=json.dumps({"error": f"Failed to fetch DevOps items: {str(e)}"}),
+            mimetype="application/json",
+            status_code=500
+        )
+    except Exception as e:
+        logging.error(f"Unexpected error fetching DevOps items: {str(e)}")
+        return func.HttpResponse(
+            body=json.dumps({"error": f"Unexpected error: {str(e)}"}),
+            mimetype="application/json",
+            status_code=500
+        )
