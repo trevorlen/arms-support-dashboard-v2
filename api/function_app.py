@@ -87,7 +87,7 @@ def fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=None):
 
         logging.info(f"📄 Fetching page {page} from Freshdesk...")
         try:
-            response = requests.get(base_url, headers=headers, params=page_params, timeout=45)
+            response = requests.get(base_url, headers=headers, params=page_params, timeout=60)
             response.raise_for_status()
         except requests.exceptions.Timeout:
             logging.error(f"⏱️ Timeout on page {page}. Returning {len(all_tickets)} tickets.")
@@ -243,8 +243,13 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
     base_url = f"https://{domain}.freshdesk.com/api/v2/tickets"
 
     # Build query parameters for Freshdesk
+    # NOTE: Freshdesk /api/v2/tickets doesn't support created_at filtering directly
+    # We'll fetch tickets and filter by created_at on the server side
     params = {}
+    # Use a reasonable lookback period to get all tickets we might need
+    # This ensures we capture all tickets that could match our date range
     if start_date:
+        # Use updated_since as a broad filter, then filter by created_at more precisely below
         params['updated_since'] = start_date
 
     try:
@@ -257,8 +262,9 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
             logging.info(f"Using {len(tickets_data)} cached tickets")
         else:
             # Fetch all pages from Freshdesk with pagination
+            # Increased max_pages to capture more tickets since we're filtering by created_at, not updated_at
             logging.info(f"Fetching tickets from Freshdesk with pagination: {base_url}")
-            tickets_data = fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=10)
+            tickets_data = fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=50)
             logging.info(f"Fetched total of {len(tickets_data)} tickets from Freshdesk")
 
             # Cache the results
@@ -270,8 +276,34 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
         # Apply client-side filters
         filtered_tickets = processed_tickets
 
+        # Filter by created_at date range (most important - filter by creation, not update)
+        if start_date:
+            from datetime import datetime
+            try:
+                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                filtered_tickets = [
+                    t for t in filtered_tickets
+                    if t.get('created_at') and datetime.fromisoformat(t['created_at'].replace('Z', '+00:00')) >= start_dt
+                ]
+                logging.info(f"Filtered to {len(filtered_tickets)} tickets created after {start_date}")
+            except Exception as e:
+                logging.warning(f"Could not parse start_date for filtering: {e}")
+
+        if end_date:
+            from datetime import datetime
+            try:
+                end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                filtered_tickets = [
+                    t for t in filtered_tickets
+                    if t.get('created_at') and datetime.fromisoformat(t['created_at'].replace('Z', '+00:00')) <= end_dt
+                ]
+                logging.info(f"Filtered to {len(filtered_tickets)} tickets created before {end_date}")
+            except Exception as e:
+                logging.warning(f"Could not parse end_date for filtering: {e}")
+
         if group_id_filter:
             filtered_tickets = [t for t in filtered_tickets if str(t.get('group_id')) == group_id_filter]
+            logging.info(f"Filtered to {len(filtered_tickets)} tickets in group {group_id_filter}")
 
         if status_filter:
             filtered_tickets = [t for t in filtered_tickets if str(t.get('status')) == status_filter]

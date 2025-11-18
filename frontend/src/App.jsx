@@ -241,14 +241,15 @@ function App() {
             {/* Tab Navigation */}
             <div className="bg-white rounded-lg shadow mb-6">
               <div className="border-b border-gray-200">
-                <nav className="flex -mb-px">
+                {/* Desktop Navigation - horizontal scrolling on small screens */}
+                <nav className="md:flex hidden -mb-px overflow-x-auto">
                   {tabs.map((tab) => {
                     const Icon = tab.icon;
                     return (
                       <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center space-x-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors ${
+                        className={`flex items-center space-x-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
                           activeTab === tab.id
                             ? 'border-primary-500 text-primary-600'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -260,6 +261,23 @@ function App() {
                     );
                   })}
                 </nav>
+
+                {/* Mobile Navigation - dropdown select */}
+                <div className="md:hidden p-4">
+                  <label htmlFor="tab-select" className="sr-only">Select tab</label>
+                  <select
+                    id="tab-select"
+                    value={activeTab}
+                    onChange={(e) => setActiveTab(e.target.value)}
+                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-base"
+                  >
+                    {tabs.map((tab) => (
+                      <option key={tab.id} value={tab.id}>
+                        {tab.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
