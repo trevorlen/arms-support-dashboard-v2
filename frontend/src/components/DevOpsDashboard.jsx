@@ -1,7 +1,9 @@
-import React from 'react';
-import { ExternalLink, GitBranch } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ExternalLink, GitBranch, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 
 const DevOpsDashboard = ({ devopsTickets, loading }) => {
+  const [sortColumn, setSortColumn] = useState('created_date');
+  const [sortDirection, setSortDirection] = useState('desc');
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -41,6 +43,78 @@ const DevOpsDashboard = ({ devopsTickets, loading }) => {
   // Get Freshdesk domain for ticket links
   const freshdeskDomain = 'arms.freshdesk.com';
 
+  // Handle column sort
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      // Toggle direction if clicking the same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column, default to ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sort tickets based on current sort column and direction
+  const sortedTickets = useMemo(() => {
+    if (!devopsTickets) return [];
+
+    const sorted = [...devopsTickets].sort((a, b) => {
+      let aValue, bValue;
+
+      switch (sortColumn) {
+        case 'id':
+          aValue = a.id;
+          bValue = b.id;
+          break;
+        case 'created_date':
+          aValue = new Date(a.created_date).getTime();
+          bValue = new Date(b.created_date).getTime();
+          break;
+        case 'title':
+          aValue = (a.title || '').toLowerCase();
+          bValue = (b.title || '').toLowerCase();
+          break;
+        case 'work_item_type':
+          aValue = (a.work_item_type || '').toLowerCase();
+          bValue = (b.work_item_type || '').toLowerCase();
+          break;
+        case 'state':
+          aValue = (a.state || '').toLowerCase();
+          bValue = (b.state || '').toLowerCase();
+          break;
+        case 'assigned_to':
+          aValue = (a.assigned_to || 'Unassigned').toLowerCase();
+          bValue = (b.assigned_to || 'Unassigned').toLowerCase();
+          break;
+        case 'freshdesk_ticket_id':
+          aValue = a.freshdesk_ticket_id || '';
+          bValue = b.freshdesk_ticket_id || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  }, [devopsTickets, sortColumn, sortDirection]);
+
+  // Render sort icon
+  const SortIcon = ({ column }) => {
+    if (sortColumn !== column) {
+      return <ChevronsUpDown className="w-4 h-4 ml-1 text-gray-400" />;
+    }
+    return sortDirection === 'asc' ? (
+      <ChevronUp className="w-4 h-4 ml-1 text-primary-600" />
+    ) : (
+      <ChevronDown className="w-4 h-4 ml-1 text-primary-600" />
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow p-6">
@@ -50,7 +124,7 @@ const DevOpsDashboard = ({ devopsTickets, loading }) => {
             DevOps Tickets
           </h2>
           <div className="text-sm text-gray-600">
-            Total: <span className="font-semibold">{devopsTickets?.length || 0}</span> tickets
+            Total: <span className="font-semibold">{sortedTickets?.length || 0}</span> tickets
           </div>
         </div>
 
@@ -65,31 +139,73 @@ const DevOpsDashboard = ({ devopsTickets, loading }) => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    DevOps Ticket ID
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('id')}
+                  >
+                    <div className="flex items-center">
+                      DevOps Ticket ID
+                      <SortIcon column="id" />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date Created
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('created_date')}
+                  >
+                    <div className="flex items-center">
+                      Date Created
+                      <SortIcon column="created_date" />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Title
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('title')}
+                  >
+                    <div className="flex items-center">
+                      Title
+                      <SortIcon column="title" />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Work Item Type
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('work_item_type')}
+                  >
+                    <div className="flex items-center">
+                      Work Item Type
+                      <SortIcon column="work_item_type" />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('state')}
+                  >
+                    <div className="flex items-center">
+                      Status
+                      <SortIcon column="state" />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Assigned To
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('assigned_to')}
+                  >
+                    <div className="flex items-center">
+                      Assigned To
+                      <SortIcon column="assigned_to" />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Linked FD Ticket
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('freshdesk_ticket_id')}
+                  >
+                    <div className="flex items-center">
+                      Linked FD Ticket
+                      <SortIcon column="freshdesk_ticket_id" />
+                    </div>
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {devopsTickets.map((ticket, index) => (
+                {sortedTickets.map((ticket, index) => (
                   <tr key={index} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
