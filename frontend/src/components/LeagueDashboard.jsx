@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import { ExternalLink } from 'lucide-react';
 
-const COLORS = ['#667eea', '#dc3545', '#28a745', '#ffc107', '#17a2b8', '#6f42c1'];
+// Blue, purple, and grey color scheme
+const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280', '#9CA3AF'];
 
 const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
   const [selectedPlatform, setSelectedPlatform] = useState(null);
@@ -236,7 +237,7 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
                     }}
                   />
                   <Legend />
-                  <Bar dataKey="count" name="Tickets">
+                  <Bar dataKey="count" name="Tickets" radius={[0, 8, 8, 0]}>
                     {leagueData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
