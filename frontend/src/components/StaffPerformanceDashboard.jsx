@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -12,7 +12,8 @@ import {
   PieChart,
   Pie,
 } from 'recharts';
-import { Users, Award, TrendingUp, Eye, EyeOff, DollarSign, Info } from 'lucide-react';
+import { Users, Award, TrendingUp, Eye, EyeOff, DollarSign, Info, RefreshCw } from 'lucide-react';
+import { getUSDtoCADRate, refreshExchangeRate } from '../services/currencyService';
 
 // Blue, purple, and grey color scheme
 const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280', '#9CA3AF'];
@@ -47,16 +48,13 @@ const AGENT_MAP = {
   154025450067: "Vitaliy Gorbenko",
 };
 
-// USD to CAD exchange rate (approximate as of January 2025)
-const USD_TO_CAD = 1.36;
-
-// Annual salaries in CAD (USD salaries converted to CAD)
-const SALARY_MAP_ANNUAL = {
-  "Trevor Len": 80000,  // CAD
-  "Shanice Thompson": 80000 * USD_TO_CAD,  // USD → CAD: $108,800
-  "Rodney Sassi": 24000,  // CAD
-  "Graham Rynbend": 48000,  // CAD
-  "Julian Varela": 24000 * USD_TO_CAD,  // USD → CAD: $32,640
+// Base salaries (in original currency)
+const SALARY_MAP_BASE = {
+  "Trevor Len": { amount: 80000, currency: "CAD" },
+  "Shanice Thompson": { amount: 80000, currency: "USD" },  // Will be converted to CAD
+  "Rodney Sassi": { amount: 24000, currency: "CAD" },
+  "Graham Rynbend": { amount: 48000, currency: "CAD" },
+  "Julian Varela": { amount: 24000, currency: "USD" },  // Will be converted to CAD
 };
 
 // Hours per week for each employee
@@ -73,11 +71,6 @@ const FTE_MAP = Object.fromEntries(
   Object.entries(HOURS_PER_WEEK_MAP).map(([name, hours]) => [name, hours / 40])
 );
 
-// Calculate daily salaries (annual / 365 calendar days)
-const SALARY_MAP_DAILY = Object.fromEntries(
-  Object.entries(SALARY_MAP_ANNUAL).map(([name, annual]) => [name, annual / 365])
-);
-
 const STATUS_COLORS = {
   'Open': '#EF4444',
   'Pending': '#F59E0B',
@@ -91,6 +84,64 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [showEfficiency, setShowEfficiency] = useState(false); // Toggle for efficiency metrics
   const [showEfficiencyTooltip, setShowEfficiencyTooltip] = useState(false); // Tooltip for efficiency explanation
+
+  // Exchange rate state
+  const [exchangeRate, setExchangeRate] = useState(1.36); // Default fallback rate
+  const [rateLastUpdated, setRateLastUpdated] = useState(null);
+  const [rateLoading, setRateLoading] = useState(false);
+  const [rateCached, setRateCached] = useState(false);
+
+  // Fetch exchange rate on component mount
+  useEffect(() => {
+    const fetchRate = async () => {
+      setRateLoading(true);
+      try {
+        const result = await getUSDtoCADRate();
+        setExchangeRate(result.rate);
+        setRateLastUpdated(result.timestamp);
+        setRateCached(result.cached);
+      } catch (error) {
+        console.error('Error fetching exchange rate:', error);
+        // Keep fallback rate if fetch fails
+      } finally {
+        setRateLoading(false);
+      }
+    };
+
+    fetchRate();
+  }, []);
+
+  // Handle manual refresh of exchange rate
+  const handleRefreshRate = async () => {
+    setRateLoading(true);
+    try {
+      const result = await refreshExchangeRate();
+      setExchangeRate(result.rate);
+      setRateLastUpdated(result.timestamp);
+      setRateCached(false);
+    } catch (error) {
+      console.error('Error refreshing exchange rate:', error);
+    } finally {
+      setRateLoading(false);
+    }
+  };
+
+  // Calculate salary maps based on current exchange rate using useMemo
+  const { SALARY_MAP_ANNUAL, SALARY_MAP_DAILY } = useMemo(() => {
+    const annual = {};
+
+    // Convert USD salaries to CAD using current exchange rate
+    Object.entries(SALARY_MAP_BASE).forEach(([name, { amount, currency }]) => {
+      annual[name] = currency === 'USD' ? amount * exchangeRate : amount;
+    });
+
+    // Calculate daily salaries (annual / 365 calendar days)
+    const daily = Object.fromEntries(
+      Object.entries(annual).map(([name, annualSalary]) => [name, annualSalary / 365])
+    );
+
+    return { SALARY_MAP_ANNUAL: annual, SALARY_MAP_DAILY: daily };
+  }, [exchangeRate]);
 
   if (loading) {
     return (
@@ -432,22 +483,47 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-700">Detailed Breakdown</h3>
-          {/* Efficiency Toggle */}
-          <button
-            onClick={() => setShowEfficiency(!showEfficiency)}
-            className={`flex items-center space-x-2 px-3 py-2 rounded-lg border transition-colors ${
-              showEfficiency
-                ? 'bg-primary-50 border-primary-300 text-primary-700'
-                : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            {showEfficiency ? (
-              <Eye className="w-4 h-4" />
-            ) : (
-              <EyeOff className="w-4 h-4" />
-            )}
-            <span className="text-sm font-medium">Efficiency Metrics</span>
-          </button>
+          <div className="flex items-center space-x-3">
+            {/* Exchange Rate Indicator */}
+            <div className="flex items-center space-x-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+              <DollarSign className="w-4 h-4 text-blue-600" />
+              <div className="flex flex-col">
+                <span className="text-xs text-blue-600 font-medium">
+                  1 USD = {exchangeRate.toFixed(4)} CAD
+                </span>
+                {rateLastUpdated && (
+                  <span className="text-[10px] text-blue-500">
+                    {rateCached ? 'Cached' : 'Live'} • {rateLastUpdated.toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={handleRefreshRate}
+                disabled={rateLoading}
+                className="ml-2 p-1 hover:bg-blue-100 rounded transition-colors disabled:opacity-50"
+                title="Refresh exchange rate"
+              >
+                <RefreshCw className={`w-3 h-3 text-blue-600 ${rateLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            {/* Efficiency Toggle */}
+            <button
+              onClick={() => setShowEfficiency(!showEfficiency)}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-lg border transition-colors ${
+                showEfficiency
+                  ? 'bg-primary-50 border-primary-300 text-primary-700'
+                  : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {showEfficiency ? (
+                <Eye className="w-4 h-4" />
+              ) : (
+                <EyeOff className="w-4 h-4" />
+              )}
+              <span className="text-sm font-medium">Efficiency Metrics</span>
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -466,6 +542,9 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
                 ))}
                 {showEfficiency && (
                   <>
+                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tickets/Hour
+                    </th>
                     <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Cost/Ticket
                     </th>
@@ -501,9 +580,6 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
                         </div>
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Tickets/Hour
-                    </th>
                   </>
                 )}
               </tr>
@@ -532,6 +608,13 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
                     ))}
                     {showEfficiency && (
                       <>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 text-center">
+                          {staff.ticketsPerHour !== null ? (
+                            <span>{staff.ticketsPerHour.toFixed(2)}</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600 text-center">
                           {staff.costPerTicket !== null ? (
                             <span>${staff.costPerTicket.toFixed(2)}</span>
@@ -544,13 +627,6 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
                             <span className={getEfficiencyColor(staff.efficiencyScore)}>
                               {staff.efficiencyScore.toFixed(2)}x
                             </span>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 text-center">
-                          {staff.ticketsPerHour !== null ? (
-                            <span>{staff.ticketsPerHour.toFixed(2)}</span>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
