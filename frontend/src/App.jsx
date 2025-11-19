@@ -95,13 +95,13 @@ function App() {
       // Calculate date range
       const { start_date, end_date } = calculateDateRange(dateRange);
 
-      // ARMS Support Group ID
-      const ARMS_GROUP_ID = '154000130280';
+      // ARMS Support Product ID
+      const ARMS_PRODUCT_ID = '154000020827';
 
-      // Fetch tickets, summary, and devops items in parallel (filtered by ARMS Support Group)
+      // Fetch tickets, summary, and devops items in parallel (filtered by ARMS Support Product)
       const [ticketsResponse, summaryResponse, devopsResponse] = await Promise.all([
-        getTickets({ start_date, limit: 10000, group_id: ARMS_GROUP_ID, include_2024: include2024 }),
-        getSummary({ start_date, group_id: ARMS_GROUP_ID, include_2024: include2024 }),
+        getTickets({ start_date, limit: 10000, product_id: ARMS_PRODUCT_ID, include_2024: include2024 }),
+        getSummary({ start_date, product_id: ARMS_PRODUCT_ID, include_2024: include2024 }),
         getDevOpsItems(),
       ]);
 

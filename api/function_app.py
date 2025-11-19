@@ -239,7 +239,7 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
     priority_filter = req.params.get('priority')
     platform_filter = req.params.get('platform')
     league_filter = req.params.get('league')
-    group_id_filter = req.params.get('group_id')
+    product_id_filter = req.params.get('product_id')
     include_2024 = req.params.get('include_2024', 'false').lower() == 'true'  # Default: don't include 2024
 
     # Build Freshdesk API URL
@@ -324,9 +324,9 @@ def tickets(req: func.HttpRequest) -> func.HttpResponse:
             except Exception as e:
                 logging.warning(f"Could not parse end_date for filtering: {e}")
 
-        if group_id_filter:
-            filtered_tickets = [t for t in filtered_tickets if str(t.get('group_id')) == group_id_filter]
-            logging.info(f"Filtered to {len(filtered_tickets)} tickets in group {group_id_filter}")
+        if product_id_filter:
+            filtered_tickets = [t for t in filtered_tickets if str(t.get('product_id')) == product_id_filter]
+            logging.info(f"Filtered to {len(filtered_tickets)} tickets for product_id {product_id_filter}")
 
         if status_filter:
             filtered_tickets = [t for t in filtered_tickets if str(t.get('status')) == status_filter]
@@ -464,7 +464,7 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
     # Get date range and filters
     start_date = req.params.get('start_date')
     end_date = req.params.get('end_date')
-    group_id_filter = req.params.get('group_id')
+    product_id_filter = req.params.get('product_id')
     include_2024 = req.params.get('include_2024', 'false').lower() == 'true'
 
     # Build Freshdesk API URL
@@ -500,10 +500,10 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
 
         logging.info(f"Processing {len(tickets_data)} tickets for summary")
 
-        # Apply group_id filter if specified
-        if group_id_filter:
-            tickets_data = [t for t in tickets_data if str(t.get('group_id')) == group_id_filter]
-            logging.info(f"Filtered to {len(tickets_data)} tickets for group_id {group_id_filter}")
+        # Apply product_id filter if specified
+        if product_id_filter:
+            tickets_data = [t for t in tickets_data if str(t.get('product_id')) == product_id_filter]
+            logging.info(f"Filtered to {len(tickets_data)} tickets for product_id {product_id_filter}")
 
         # Filter by year - exclude 2024 tickets unless explicitly requested
         from datetime import datetime
