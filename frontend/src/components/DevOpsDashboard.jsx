@@ -121,7 +121,7 @@ const DevOpsDashboard = ({ devopsTickets, loading }) => {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900 flex items-center">
             <GitBranch className="mr-2 w-6 h-6" />
-            DevOps Tickets
+            Current DevOps Tickets
           </h2>
           <div className="text-sm text-gray-600">
             Total: <span className="font-semibold">{sortedTickets?.length || 0}</span> tickets

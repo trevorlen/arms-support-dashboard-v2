@@ -71,6 +71,15 @@ const FTE_MAP = Object.fromEntries(
   Object.entries(HOURS_PER_WEEK_MAP).map(([name, hours]) => [name, hours / 40])
 );
 
+// Leave periods for staff (maternity/paternity/extended leave)
+const LEAVE_PERIODS = {
+  "Shanice Thompson": {
+    start: new Date('2025-06-15'),
+    end: new Date('2025-11-01'),
+    type: 'Maternity Leave'
+  }
+};
+
 const STATUS_COLORS = {
   'Open': '#EF4444',
   'Pending': '#F59E0B',
@@ -143,6 +152,26 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
     return { SALARY_MAP_ANNUAL: annual, SALARY_MAP_DAILY: daily };
   }, [exchangeRate]);
 
+  // Helper function to calculate leave days overlap with date range
+  const calculateLeaveDays = (staffName, rangeStartDate, rangeEndDate) => {
+    const leavePeriod = LEAVE_PERIODS[staffName];
+    if (!leavePeriod) return 0;
+
+    const leaveStart = leavePeriod.start;
+    const leaveEnd = leavePeriod.end;
+
+    // Find overlap between date range and leave period
+    const overlapStart = rangeStartDate > leaveStart ? rangeStartDate : leaveStart;
+    const overlapEnd = rangeEndDate < leaveEnd ? rangeEndDate : leaveEnd;
+
+    // If no overlap, return 0
+    if (overlapStart > overlapEnd) return 0;
+
+    // Calculate days in overlap (inclusive)
+    const leaveDays = Math.ceil((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1;
+    return leaveDays;
+  };
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -207,6 +236,9 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
 
   // Calculate date range from tickets (earliest to latest date)
   let dateRangeInDays = 30; // Default to 30 days if no tickets
+  let rangeStartDate = new Date();
+  let rangeEndDate = new Date();
+
   if (tickets?.data && tickets.data.length > 0) {
     const ticketDates = tickets.data
       .filter(t => t.created_at || t.created_date)
@@ -214,9 +246,11 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
       .filter(d => !isNaN(d));
 
     if (ticketDates.length > 0) {
-      const earliestDate = Math.min(...ticketDates);
-      const latestDate = Math.max(...ticketDates);
-      dateRangeInDays = Math.ceil((latestDate - earliestDate) / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end days
+      const earliestTime = Math.min(...ticketDates);
+      const latestTime = Math.max(...ticketDates);
+      rangeStartDate = new Date(earliestTime);
+      rangeEndDate = new Date(latestTime);
+      dateRangeInDays = Math.ceil((latestTime - earliestTime) / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end days
     }
   }
 
@@ -229,10 +263,22 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
     const fteFactor = FTE_MAP[staff.name];
     const hoursPerWeek = HOURS_PER_WEEK_MAP[staff.name];
 
+    // Calculate leave days for this staff member
+    const leaveDays = calculateLeaveDays(staff.name, rangeStartDate, rangeEndDate);
+    const workingDays = Math.max(1, dateRangeInDays - leaveDays); // Ensure at least 1 day to avoid division by zero
+
+    // Store leave information
+    staff.leaveDays = leaveDays;
+    staff.workingDays = workingDays;
+    staff.onLeave = leaveDays > 0;
+    if (staff.onLeave) {
+      staff.leaveType = LEAVE_PERIODS[staff.name]?.type || 'Leave';
+    }
+
     if (dailySalary && fteFactor && staff.total > 0) {
-      // FTE-adjusted cost for the date range
-      // Formula: (daily_salary × days × FTE_factor) / tickets
-      const periodCost = dailySalary * dateRangeInDays * fteFactor;
+      // FTE-adjusted cost for the date range, excluding leave days
+      // Formula: (daily_salary × working_days × FTE_factor) / tickets
+      const periodCost = dailySalary * workingDays * fteFactor;
       staff.costPerTicket = periodCost / staff.total;
       staff.periodCost = periodCost;
       staff.fteFactor = fteFactor;
@@ -244,10 +290,10 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
       staff.hasSalaryData = false;
     }
 
-    // Calculate tickets per hour
+    // Calculate tickets per hour, excluding leave days
     if (hoursPerWeek && staff.total > 0) {
-      // Total hours worked in the date range = (hours per week / 7 days) × date range days
-      const totalHoursWorked = (hoursPerWeek / 7) * dateRangeInDays;
+      // Total hours worked in the date range = (hours per week / 7 days) × working days
+      const totalHoursWorked = (hoursPerWeek / 7) * workingDays;
       staff.ticketsPerHour = staff.total / totalHoursWorked;
     } else {
       staff.ticketsPerHour = null;
@@ -483,47 +529,22 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-700">Detailed Breakdown</h3>
-          <div className="flex items-center space-x-3">
-            {/* Exchange Rate Indicator */}
-            <div className="flex items-center space-x-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-              <DollarSign className="w-4 h-4 text-blue-600" />
-              <div className="flex flex-col">
-                <span className="text-xs text-blue-600 font-medium">
-                  1 USD = {exchangeRate.toFixed(4)} CAD
-                </span>
-                {rateLastUpdated && (
-                  <span className="text-[10px] text-blue-500">
-                    {rateCached ? 'Cached' : 'Live'} • {rateLastUpdated.toLocaleTimeString()}
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={handleRefreshRate}
-                disabled={rateLoading}
-                className="ml-2 p-1 hover:bg-blue-100 rounded transition-colors disabled:opacity-50"
-                title="Refresh exchange rate"
-              >
-                <RefreshCw className={`w-3 h-3 text-blue-600 ${rateLoading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-
-            {/* Efficiency Toggle */}
-            <button
-              onClick={() => setShowEfficiency(!showEfficiency)}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg border transition-colors ${
-                showEfficiency
-                  ? 'bg-primary-50 border-primary-300 text-primary-700'
-                  : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              {showEfficiency ? (
-                <Eye className="w-4 h-4" />
-              ) : (
-                <EyeOff className="w-4 h-4" />
-              )}
-              <span className="text-sm font-medium">Efficiency Metrics</span>
-            </button>
-          </div>
+          {/* Efficiency Toggle */}
+          <button
+            onClick={() => setShowEfficiency(!showEfficiency)}
+            className={`flex items-center space-x-2 px-3 py-2 rounded-lg border transition-colors ${
+              showEfficiency
+                ? 'bg-primary-50 border-primary-300 text-primary-700'
+                : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            {showEfficiency ? (
+              <Eye className="w-4 h-4" />
+            ) : (
+              <EyeOff className="w-4 h-4" />
+            )}
+            <span className="text-sm font-medium">Efficiency Metrics</span>
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -590,12 +611,20 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
                 return (
                   <tr key={index} className="hover:bg-gray-50">
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <div className="flex items-center">
+                      <div className="flex items-center gap-2">
                         <div
-                          className="w-3 h-3 rounded-full mr-2"
+                          className="w-3 h-3 rounded-full"
                           style={{ backgroundColor: COLORS[index % COLORS.length] }}
                         ></div>
                         <span className="text-sm font-medium text-gray-900">{staff.name}</span>
+                        {staff.onLeave && (
+                          <span
+                            className="px-2 py-0.5 text-[10px] font-semibold bg-purple-100 text-purple-700 rounded border border-purple-300"
+                            title={`${staff.leaveType}: ${staff.leaveDays} days during this period (adjusted metrics)`}
+                          >
+                            {staff.leaveType}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-sm font-semibold text-gray-900 text-center">
