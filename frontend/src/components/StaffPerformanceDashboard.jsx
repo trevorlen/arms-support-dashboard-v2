@@ -74,7 +74,15 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
   let unassignedCount = 0;
   let unknownAgentCount = 0;
 
+  // ARMS Support Product ID for filtering
+  const ARMS_PRODUCT_ID = '154000020827';
+
   tickets?.data?.forEach((ticket) => {
+    // Filter by product_id to ensure only ARMS Support tickets are counted
+    if (ticket.product_id && String(ticket.product_id) !== ARMS_PRODUCT_ID) {
+      return;
+    }
+
     // Try multiple possible field names for agent assignment
     const agentId = ticket.responder_id || ticket.agent_id;
 
