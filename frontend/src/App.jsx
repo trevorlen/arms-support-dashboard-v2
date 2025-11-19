@@ -22,6 +22,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dateRange, setDateRange] = useState('last_week');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [lastUpdate, setLastUpdate] = useState(null);
   const [apiStatus, setApiStatus] = useState('checking');
   const [selectedTicketId, setSelectedTicketId] = useState(null);
@@ -34,20 +36,46 @@ function App() {
     const now = new Date();
     let startDate;
 
-    if (range === 'last_week') {
-      // Calculate previous full week (Sunday to Sunday)
-      const currentDay = now.getDay(); // 0 = Sunday, 6 = Saturday
-      const daysToLastSunday = currentDay === 0 ? 7 : currentDay;
+    if (range === 'custom') {
+      // Use custom dates if provided
+      if (customStartDate && customEndDate) {
+        const start = new Date(customStartDate);
+        start.setHours(0, 0, 0, 0);
 
-      // End of last week (last Sunday at 11:59:59 PM)
-      const endDate = new Date(now);
-      endDate.setDate(now.getDate() - daysToLastSunday);
-      endDate.setHours(23, 59, 59, 999);
+        const end = new Date(customEndDate);
+        end.setHours(23, 59, 59, 999);
 
-      // Start of last week (Sunday before that at 12:00:00 AM)
-      startDate = new Date(endDate);
-      startDate.setDate(endDate.getDate() - 6);
+        return {
+          start_date: start.toISOString(),
+          end_date: end.toISOString()
+        };
+      }
+      // If custom dates not set, default to last 7 days
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - 7);
       startDate.setHours(0, 0, 0, 0);
+
+      return {
+        start_date: startDate.toISOString(),
+        end_date: now.toISOString()
+      };
+    } else if (range === 'last_week') {
+      // Calculate previous full week (Sunday to Saturday)
+      const currentDay = now.getDay(); // 0 = Sunday, 6 = Saturday
+
+      // Start of this week (most recent Sunday at 12:00:00 AM)
+      const thisWeekStart = new Date(now);
+      thisWeekStart.setDate(now.getDate() - currentDay);
+      thisWeekStart.setHours(0, 0, 0, 0);
+
+      // Start of last week (7 days before this week's start)
+      startDate = new Date(thisWeekStart);
+      startDate.setDate(thisWeekStart.getDate() - 7);
+
+      // End of last week (Saturday at 11:59:59 PM)
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+      endDate.setHours(23, 59, 59, 999);
 
       return {
         start_date: startDate.toISOString(),
@@ -120,7 +148,7 @@ function App() {
 
   useEffect(() => {
     fetchData();
-  }, [dateRange, include2024]);
+  }, [dateRange, include2024, customStartDate, customEndDate]);
 
   const tabs = [
     { id: 'platform', name: 'By Platform', icon: BarChart3 },
@@ -147,7 +175,7 @@ function App() {
                 className="h-16 w-auto"
               />
               <div>
-                <h1 className="text-3xl font-bold text-white">ARMS Support Dashboard</h1>
+                <h1 className="text-3xl font-bold text-white">Support Management Dashboard</h1>
                 <p className="text-primary-100 mt-1">
                   Real-time ticket analytics and insights
                 </p>
@@ -201,14 +229,37 @@ function App() {
                   onChange={(e) => setDateRange(e.target.value)}
                   className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
-                  <option value="last_week">Last Week (Sun-Sun)</option>
+                  <option value="last_week">Last Week (Sun-Sat)</option>
                   <option value={1}>Last 24 hours</option>
                   <option value={7}>Last 7 days</option>
                   <option value={14}>Last 14 days</option>
                   <option value={30}>Last 30 days</option>
                   <option value={90}>Last 90 days</option>
+                  <option value="custom">Custom</option>
                 </select>
-                {!loading && (
+                {dateRange === 'custom' && (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <span className="text-sm text-gray-500">to</span>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                  </div>
+                )}
+                {!loading && dateRange !== 'custom' && (
+                  <span className="text-sm text-primary-600 font-medium">
+                    {getDateRangeText()}
+                  </span>
+                )}
+                {!loading && dateRange === 'custom' && customStartDate && customEndDate && (
                   <span className="text-sm text-primary-600 font-medium">
                     {getDateRangeText()}
                   </span>

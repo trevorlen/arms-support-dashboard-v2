@@ -79,6 +79,7 @@ export const getTickets = async (params = {}) => {
 export const getTicket = async (ticketId) => {
   try {
     const response = await api.get(`/ticket/${ticketId}`);
+    // Response now includes ticket, requester, and conversations
     return response.data;
   } catch (error) {
     throw new Error(`Failed to fetch ticket: ${error.message}`);

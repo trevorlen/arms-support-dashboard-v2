@@ -172,6 +172,7 @@ def process_ticket(ticket, domain):
 
     ticket['platform'] = get_custom_field_value(cf, 'cf_platform') or 'Unknown'
     ticket['league'] = get_custom_field_value(cf, 'cf_league') or 'Unknown'
+    ticket['team'] = get_custom_field_value(cf, 'cf_team') or 'Unknown'
     ticket['custom_ticket_type'] = get_custom_field_value(cf, 'cf_ticket_type') or 'Unknown'
     ticket['issue_type'] = get_custom_field_value(cf, 'cf_issue_type') or 'Unknown'
     ticket['type_detail'] = get_custom_field_value(cf, 'cf_description') or 'Unknown'
@@ -396,15 +397,31 @@ def ticket(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     try:
-        # Fetch ticket details
+        # Fetch ticket details (include stats for timeline data)
         ticket_url = f"https://{domain}.freshdesk.com/api/v2/tickets/{ticket_id}"
-        logging.info(f"Fetching ticket: {ticket_url}")
-        ticket_response = requests.get(ticket_url, headers=headers, timeout=30)
+        params = {'include': 'stats'}
+        logging.info(f"Fetching ticket with stats: {ticket_url}")
+        ticket_response = requests.get(ticket_url, headers=headers, params=params, timeout=30)
         ticket_response.raise_for_status()
         ticket_data = ticket_response.json()
 
         # Process ticket
         processed_ticket = process_ticket(ticket_data, domain)
+
+        # Fetch requester information if requester_id exists
+        requester_data = None
+        requester_id = ticket_data.get('requester_id')
+        if requester_id:
+            try:
+                requester_url = f"https://{domain}.freshdesk.com/api/v2/contacts/{requester_id}"
+                logging.info(f"Fetching requester: {requester_url}")
+                requester_response = requests.get(requester_url, headers=headers, timeout=30)
+                requester_response.raise_for_status()
+                requester_data = requester_response.json()
+                logging.info(f"✅ Fetched requester: {requester_data.get('name', 'Unknown')}")
+            except Exception as e:
+                logging.warning(f"Could not fetch requester details: {str(e)}")
+                requester_data = None
 
         # Fetch conversations
         conversations_url = f"https://{domain}.freshdesk.com/api/v2/tickets/{ticket_id}/conversations"
@@ -424,6 +441,7 @@ def ticket(req: func.HttpRequest) -> func.HttpResponse:
         # Combine data
         result = {
             "ticket": processed_ticket,
+            "requester": requester_data,
             "conversations": conversations,
             "agent_interactions_count": agent_interactions_count
         }

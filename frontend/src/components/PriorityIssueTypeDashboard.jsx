@@ -38,19 +38,27 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading }) => {
     );
   }
 
-  // Priority breakdown
-  const priorityCounts = {};
+  // Priority breakdown - always show all 4 priorities
+  const priorityCounts = {
+    'Urgent': 0,
+    'High': 0,
+    'Medium': 0,
+    'Low': 0
+  };
+
   tickets.data.forEach((ticket) => {
     const priority = ticket.priority_name || ticket.priority || 'Unknown';
-    priorityCounts[priority] = (priorityCounts[priority] || 0) + 1;
+    if (priorityCounts.hasOwnProperty(priority)) {
+      priorityCounts[priority] = (priorityCounts[priority] || 0) + 1;
+    }
   });
 
-  const priorityData = Object.entries(priorityCounts)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => {
-      const order = { Urgent: 4, High: 3, Medium: 2, Low: 1 };
-      return (order[b.name] || 0) - (order[a.name] || 0);
-    });
+  const priorityData = [
+    { name: 'Urgent', count: priorityCounts['Urgent'] },
+    { name: 'High', count: priorityCounts['High'] },
+    { name: 'Medium', count: priorityCounts['Medium'] },
+    { name: 'Low', count: priorityCounts['Low'] }
+  ];
 
   const totalPriority = priorityData.reduce((sum, item) => sum + item.count, 0);
 
@@ -113,7 +121,9 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading }) => {
             {/* Priority Summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               {priorityData.map((priority, index) => {
-                const percentage = ((priority.count / totalPriority) * 100).toFixed(1);
+                const percentage = totalPriority > 0
+                  ? ((priority.count / totalPriority) * 100).toFixed(1)
+                  : '0.0';
                 const colorMap = {
                   Urgent: { bg: 'bg-red-100', text: 'text-red-900', border: 'border-red-300' },
                   High: { bg: 'bg-orange-100', text: 'text-orange-900', border: 'border-orange-300' },
@@ -134,48 +144,6 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading }) => {
                 );
               })}
             </div>
-
-            {/* Priority Chart */}
-            <div className="mb-8">
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={priorityData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="count" name="Tickets">
-                    {priorityData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Priority Pie Chart */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-700 mb-4">Priority Distribution</h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={priorityData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="count"
-                  >
-                    {priorityData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
           </>
         )}
       </div>
@@ -194,7 +162,7 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading }) => {
         ) : (
           <>
             {/* Issue Type Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-6">
                 <h3 className="text-sm font-medium text-red-800 mb-2">System Issues</h3>
                 <p className="text-3xl font-bold text-red-900">
@@ -212,23 +180,6 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading }) => {
                 <p className="text-3xl font-bold text-green-900">{devAssistanceNeeded}</p>
               </div>
             </div>
-
-            {/* Issue Type Chart */}
-            <div className="mb-8">
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={issueTypeData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" name="Tickets">
-                    {issueTypeData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={ISSUE_COLORS[index % ISSUE_COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
           </>
         )}
       </div>
@@ -241,17 +192,15 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading }) => {
             System Issue Tags
           </h2>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="flex flex-wrap gap-3">
             {systemIssueTags.map((tag, index) => (
-              <div
+              <span
                 key={index}
-                className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border-2 border-red-200"
+                className="px-4 py-2 bg-red-100 text-red-800 rounded-lg text-sm font-semibold border-2 border-red-300 hover:bg-red-200 transition-colors"
+                title={tag.name}
               >
-                <h4 className="text-sm font-medium text-red-800 mb-2 truncate" title={tag.name}>
-                  {tag.name}
-                </h4>
-                <p className="text-2xl font-bold text-red-900">{tag.count}</p>
-              </div>
+                {tag.name} <span className="ml-1 font-bold">({tag.count})</span>
+              </span>
             ))}
           </div>
         </div>
@@ -265,17 +214,15 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading }) => {
             User Issue Tags
           </h2>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="flex flex-wrap gap-3">
             {userIssueTags.map((tag, index) => (
-              <div
+              <span
                 key={index}
-                className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border-2 border-blue-200"
+                className="px-4 py-2 bg-blue-100 text-blue-800 rounded-lg text-sm font-semibold border-2 border-blue-300 hover:bg-blue-200 transition-colors"
+                title={tag.name}
               >
-                <h4 className="text-sm font-medium text-blue-800 mb-2 truncate" title={tag.name}>
-                  {tag.name}
-                </h4>
-                <p className="text-2xl font-bold text-blue-900">{tag.count}</p>
-              </div>
+                {tag.name} <span className="ml-1 font-bold">({tag.count})</span>
+              </span>
             ))}
           </div>
         </div>

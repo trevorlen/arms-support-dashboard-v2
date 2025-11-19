@@ -6,6 +6,7 @@ import DevOpsLink from './DevOpsLink';
 
 const TicketDetailModal = ({ ticketId, onClose }) => {
   const [ticket, setTicket] = useState(null);
+  const [requester, setRequester] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -15,7 +16,9 @@ const TicketDetailModal = ({ ticketId, onClose }) => {
       setError(null);
       try {
         const response = await getTicket(ticketId);
-        setTicket(response.data || response);
+        // Response includes ticket, requester, and conversations
+        setTicket(response.ticket || response.data || response);
+        setRequester(response.requester || null);
       } catch (err) {
         console.error('Error fetching ticket:', err);
         setError(err.message || 'Failed to load ticket details');
@@ -126,8 +129,42 @@ const TicketDetailModal = ({ ticketId, onClose }) => {
             </div>
           ) : ticket ? (
             <div className="space-y-6">
-              {/* Status and Priority Section */}
-              <div className="flex flex-wrap gap-3 items-center">
+              {/* Badge Row: Platform, Priority, Tags, Status (right-aligned) */}
+              <div className="flex flex-wrap gap-3 items-center justify-between">
+                <div className="flex flex-wrap gap-3 items-center">
+                  {/* Platform */}
+                  {ticket.platform && (
+                    <span className="px-4 py-2 rounded-lg bg-blue-100 text-blue-800 font-semibold text-sm border border-blue-200">
+                      {ticket.platform}
+                    </span>
+                  )}
+
+                  {/* Priority */}
+                  <span
+                    className={`px-4 py-2 rounded-lg font-semibold text-sm border-2 ${getPriorityColor(
+                      ticket.priority_name || ticket.priority
+                    )}`}
+                  >
+                    {ticket.priority_name || ticket.priority} Priority
+                  </span>
+
+                  {/* Tags */}
+                  {Array.isArray(ticket.tags) && ticket.tags.length > 0 && (
+                    ticket.tags.slice(0, 2).map((tag, index) => (
+                      <span
+                        key={index}
+                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium border border-gray-300"
+                      >
+                        {tag}
+                      </span>
+                    ))
+                  )}
+
+                  {/* DevOps Link */}
+                  <DevOpsLink ticket={ticket} />
+                </div>
+
+                {/* Status - Right Aligned */}
                 <span
                   className={`px-4 py-2 rounded-full font-semibold text-sm border-2 ${getStatusColor(
                     ticket.status_name || ticket.status
@@ -135,45 +172,56 @@ const TicketDetailModal = ({ ticketId, onClose }) => {
                 >
                   {ticket.status_name || ticket.status}
                 </span>
-                <span
-                  className={`px-4 py-2 rounded-lg font-semibold text-sm border-2 ${getPriorityColor(
-                    ticket.priority_name || ticket.priority
-                  )}`}
-                >
-                  {ticket.priority_name || ticket.priority} Priority
-                </span>
-                {(ticket.ticket_type || ticket.type) && (
-                  <span className="px-4 py-2 rounded-lg bg-indigo-100 text-indigo-800 font-semibold text-sm">
-                    {ticket.ticket_type || ticket.type}
-                  </span>
-                )}
-                
-                {/* DevOps Link */}
-                <DevOpsLink ticket={ticket} />
               </div>
 
-              {/* Details Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* League/Platform */}
-                {ticket.league && (
-                  <div className="flex items-center space-x-2 text-gray-700">
-                    <Tag className="w-5 h-5 text-gray-500" />
-                    <div>
-                      <p className="text-xs text-gray-500">League</p>
-                      <p className="font-semibold">{ticket.league}</p>
+              {/* Ticket Details and Timeline Side by Side */}
+              <div className="flex gap-6">
+                {/* Left: Ticket Details - 50% width */}
+                <div className="w-1/2 bg-gray-50 rounded-lg p-6 border border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Ticket Details</h3>
+                  <div className="space-y-4">
+                    {/* Requester */}
+                    <div className="flex items-start space-x-3">
+                      <User className="w-5 h-5 text-gray-500 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 uppercase">Requester</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {requester ? requester.name : 'Loading...'}
+                        </p>
+                        {requester && requester.email && (
+                          <p className="text-xs text-gray-600">{requester.email}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-                {ticket.platform && (
-                  <div className="flex items-center space-x-2 text-gray-700">
-                    <Tag className="w-5 h-5 text-gray-500" />
-                    <div>
-                      <p className="text-xs text-gray-500">Platform</p>
-                      <p className="font-semibold">{ticket.platform}</p>
-                    </div>
-                  </div>
-                )}
 
+                    {/* League */}
+                    <div className="flex items-start space-x-3">
+                      <Tag className="w-5 h-5 text-gray-500 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 uppercase">League</p>
+                        <p className="text-sm font-semibold text-gray-900">{ticket.league || 'N/A'}</p>
+                      </div>
+                    </div>
+
+                    {/* Team */}
+                    <div className="flex items-start space-x-3">
+                      <Tag className="w-5 h-5 text-gray-500 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 uppercase">Team</p>
+                        <p className="text-sm font-semibold text-gray-900">{ticket.team || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Timeline - 50% width */}
+                <div className="w-1/2">
+                  {ticket && <TicketTimeline ticket={ticket} />}
+                </div>
+              </div>
+
+              {/* Additional Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Assigned To */}
                 {ticket.assigned_to && (
                   <div className="flex items-center space-x-2 text-gray-700">
@@ -184,15 +232,6 @@ const TicketDetailModal = ({ ticketId, onClose }) => {
                     </div>
                   </div>
                 )}
-
-                {/* Created Date */}
-                <div className="flex items-center space-x-2 text-gray-700">
-                  <Calendar className="w-5 h-5 text-gray-500" />
-                  <div>
-                    <p className="text-xs text-gray-500">Created</p>
-                    <p className="font-semibold">{formatDate(ticket.created_at)}</p>
-                  </div>
-                </div>
 
                 {/* Resolved Date */}
                 {ticket.resolved_at && (
@@ -232,47 +271,25 @@ const TicketDetailModal = ({ ticketId, onClose }) => {
               {ticket.description && (
                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">Description</h3>
-                  <div 
+                  <div
                     className="text-gray-700 text-sm prose prose-sm max-w-none"
                     dangerouslySetInnerHTML={{ __html: ticket.description }}
                   />
                 </div>
               )}
 
-              {/* Tags */}
-              {Array.isArray(ticket.tags) && ticket.tags.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Tags</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {ticket.tags.map((tag, index) => (
-                      <span
-                        key={index}
-                        className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Timeline */}
-              {ticket && <TicketTimeline ticket={ticket} />}
-
-              {/* Freshdesk Link */}
-              {ticket.freshdesk_url && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <a
-                    href={ticket.freshdesk_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 font-medium"
-                  >
-                    <LinkIcon className="w-5 h-5" />
-                    <span>View Full Ticket in Freshdesk</span>
-                  </a>
-                </div>
-              )}
+              {/* Freshdesk Link - Always Visible */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <a
+                  href={ticket.freshdesk_url || `https://arms.freshdesk.com/a/tickets/${ticketId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  <LinkIcon className="w-5 h-5" />
+                  <span>View Full Ticket in Freshdesk</span>
+                </a>
+              </div>
             </div>
           ) : null}
         </div>

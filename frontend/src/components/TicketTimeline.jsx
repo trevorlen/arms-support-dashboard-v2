@@ -21,27 +21,22 @@ const TicketTimeline = ({ ticket }) => {
       });
     }
 
-    if (ticket.status_changed_at) {
+    // Check for first_responded_at in stats object or directly on ticket
+    const firstRespondedAt = ticket.stats?.first_responded_at || ticket.first_responded_at;
+    if (firstRespondedAt) {
       events.push({
-        timestamp: ticket.status_changed_at,
-        event: 'Status Changed',
-        status: ticket.status_name || ticket.status,
+        timestamp: firstRespondedAt,
+        event: 'First Response',
+        status: 'Responded',
         agent: ticket.assigned_to,
       });
     }
 
-    if (ticket.resolved_at) {
+    // Check for closed_at in stats object or directly on ticket
+    const closedAt = ticket.stats?.closed_at || ticket.closed_at;
+    if (closedAt) {
       events.push({
-        timestamp: ticket.resolved_at,
-        event: 'Ticket Resolved',
-        status: 'Resolved',
-        agent: ticket.resolved_by || ticket.assigned_to,
-      });
-    }
-
-    if (ticket.closed_at) {
-      events.push({
-        timestamp: ticket.closed_at,
+        timestamp: closedAt,
         event: 'Ticket Closed',
         status: 'Closed',
         agent: ticket.closed_by || ticket.assigned_to,
@@ -82,8 +77,8 @@ const TicketTimeline = ({ ticket }) => {
   };
 
   return (
-    <div className="border-t border-gray-200 pt-6">
-      <h3 className="text-lg font-semibold text-gray-700 mb-4">Timeline</h3>
+    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 h-full">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Timeline</h3>
       <div className="relative">
         {/* Timeline Line */}
         <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gray-200"></div>

@@ -4,8 +4,8 @@ import { TrendingUp, AlertTriangle, CheckCircle, Clock, Timer, ArrowUpRight, Arr
 const KPICards = ({ stats, loading }) => {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
-        {[1, 2, 3, 4, 5].map((i) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+        {[1, 2, 3, 4].map((i) => (
           <div key={i} className="bg-white rounded-lg shadow p-6 animate-pulse">
             <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
             <div className="h-8 bg-gray-200 rounded w-1/2"></div>
@@ -67,18 +67,10 @@ const KPICards = ({ stats, loading }) => {
       bgColor: 'bg-yellow-50',
       iconColor: 'text-yellow-600',
     },
-    {
-      title: 'System Issues',
-      value: stats?.system_issues || 0,
-      icon: AlertTriangle,
-      color: 'red',
-      bgColor: 'bg-red-50',
-      iconColor: 'text-red-600',
-    },
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
       {cards.map((card, index) => {
         const Icon = card.icon;
         const hasChange = card.change !== undefined && card.change !== null;
