@@ -1,12 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Blue, purple, and grey color scheme
 const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280', '#9CA3AF'];
 
 const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
   const [selectedPlatform, setSelectedPlatform] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // ARMS Support Product ID for filtering
+  const ARMS_PRODUCT_ID = '154000020827';
 
   const getStatusColor = (status) => {
     const colors = {
@@ -20,6 +26,87 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
+
+  // Search and pagination controls component
+  const SearchAndPaginationControls = () => (
+    <div className="space-y-4 mb-4">
+      {/* Search Bar */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search by ticket # or subject..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <select
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setCurrentPage(1);
+          }}
+          className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+        >
+          <option value={10}>10 per page</option>
+          <option value={25}>25 per page</option>
+          <option value={50}>50 per page</option>
+        </select>
+      </div>
+
+      {/* Results Info */}
+      {searchQuery && (
+        <div className="text-sm text-gray-600">
+          Found {searchFilteredTickets.length} ticket{searchFilteredTickets.length !== 1 ? 's' : ''} matching "{searchQuery}"
+        </div>
+      )}
+    </div>
+  );
+
+  // Pagination controls component
+  const PaginationControls = () => (
+    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4">
+      <div className="text-sm text-gray-600">
+        {searchFilteredTickets.length > 0 ? (
+          <>Showing {startIndex}-{endIndex} of {searchFilteredTickets.length} tickets</>
+        ) : (
+          <>No tickets found</>
+        )}
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center gap-2">
+          <button
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            className="px-3 py-1 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-sm text-gray-600">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            className="px-3 py-1 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -46,10 +133,50 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
   // Get list of platforms
   const platforms = Object.keys(platformLeagueCounts).sort();
 
-  // Filter tickets by selected platform
-  const filteredTickets = selectedPlatform
-    ? tickets?.data?.filter(t => (t.platform || 'Unknown') === selectedPlatform)
-    : [];
+  // Reset page when search query or selected platform changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedPlatform]);
+
+  // Filter tickets by selected platform and product_id
+  const platformFilteredTickets = useMemo(() => {
+    if (!selectedPlatform || !tickets?.data) return [];
+
+    return tickets.data.filter(t => {
+      // Filter by platform
+      const matchesPlatform = (t.platform || 'Unknown') === selectedPlatform;
+
+      // Filter by product_id to ensure only ARMS Support tickets
+      const matchesProduct = !t.product_id || String(t.product_id) === ARMS_PRODUCT_ID;
+
+      return matchesPlatform && matchesProduct;
+    });
+  }, [selectedPlatform, tickets, ARMS_PRODUCT_ID]);
+
+  // Search filtered tickets
+  const searchFilteredTickets = useMemo(() => {
+    if (!searchQuery) return platformFilteredTickets;
+
+    const query = searchQuery.toLowerCase();
+    return platformFilteredTickets.filter(ticket =>
+      String(ticket.id).includes(query) ||
+      (ticket.subject || ticket.title || '').toLowerCase().includes(query)
+    );
+  }, [platformFilteredTickets, searchQuery]);
+
+  // Paginate search results
+  const paginatedTickets = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return searchFilteredTickets.slice(startIndex, endIndex);
+  }, [searchFilteredTickets, currentPage, pageSize]);
+
+  const totalPages = Math.ceil(searchFilteredTickets.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize + 1;
+  const endIndex = Math.min(startIndex + pageSize - 1, searchFilteredTickets.length);
+
+  // Use platformFilteredTickets for counts (not search filtered)
+  const filteredTickets = platformFilteredTickets;
 
   // Group tickets by league (filtered by platform)
   const leagueCounts = {};
@@ -142,6 +269,7 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
                   <h3 className="text-lg font-semibold text-gray-700 mb-4">
                     {leagueData[0].name} - Recent Tickets ({filteredTickets.length})
                   </h3>
+                  <SearchAndPaginationControls />
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
@@ -164,7 +292,7 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredTickets.slice(0, 20).map((ticket) => (
+                        {paginatedTickets.map((ticket) => (
                           <tr
                             key={ticket.id}
                             className="hover:bg-gray-50 cursor-pointer transition-colors"
@@ -203,11 +331,7 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
                       </tbody>
                     </table>
                   </div>
-                  {filteredTickets.length > 20 && (
-                    <p className="text-sm text-gray-500 mt-2">
-                      Showing 20 of {filteredTickets.length} tickets
-                    </p>
-                  )}
+                  <PaginationControls />
                 </div>
               )}
             </>
@@ -290,6 +414,7 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
             {onTicketClick && filteredTickets && filteredTickets.length > 0 && (
               <div className="mt-8">
                 <h3 className="text-lg font-semibold text-gray-700 mb-4">Recent Tickets</h3>
+                <SearchAndPaginationControls />
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -315,7 +440,7 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredTickets.slice(0, 10).map((ticket) => (
+                      {paginatedTickets.map((ticket) => (
                         <tr
                           key={ticket.id}
                           className="hover:bg-gray-50 cursor-pointer transition-colors"
@@ -357,11 +482,7 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
                     </tbody>
                   </table>
                 </div>
-                {filteredTickets.length > 10 && (
-                  <p className="text-sm text-gray-500 mt-2">
-                    Showing 10 of {filteredTickets.length} tickets
-                  </p>
-                )}
+                <PaginationControls />
               </div>
             )}
 
