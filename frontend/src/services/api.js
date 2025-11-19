@@ -18,9 +18,13 @@ const STATUS_MAP = {
   3: 'Pending',
   4: 'Resolved',
   5: 'Closed',
-  6: 'Awaiting Information',
+  6: 'Escalated',
   7: 'Awaiting Information',
-  // Add more status mappings as needed
+  8: 'Review Response',
+  9: 'Waiting on Customer',
+  10: 'Waiting on Third Party',
+  11: 'On-Hold',
+  12: 'In Backlog'
 };
 
 // Helper function to map status ID to name

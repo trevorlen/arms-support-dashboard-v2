@@ -148,7 +148,19 @@ def get_custom_field_value(custom_fields, field_prefix):
 def process_ticket(ticket, domain):
     """Process ticket data - add computed fields"""
     # Map status codes to names
-    status_map = {2: 'Open', 3: 'Pending', 4: 'Resolved', 5: 'Closed'}
+    status_map = {
+        2: 'Open',
+        3: 'Pending',
+        4: 'Resolved',
+        5: 'Closed',
+        6: 'Escalated',
+        7: 'Awaiting Information',
+        8: 'Review Response',
+        9: 'Waiting on Customer',
+        10: 'Waiting on Third Party',
+        11: 'On-Hold',
+        12: 'In Backlog'
+    }
     ticket['status_name'] = status_map.get(ticket.get('status'), 'Unknown')
 
     # Map priority codes to names
