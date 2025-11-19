@@ -12,7 +12,7 @@ import {
   PieChart,
   Pie,
 } from 'recharts';
-import { Users, Award, TrendingUp } from 'lucide-react';
+import { Users, Award, TrendingUp, Eye, EyeOff, DollarSign } from 'lucide-react';
 
 // Blue, purple, and grey color scheme
 const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280', '#9CA3AF'];
@@ -47,6 +47,23 @@ const AGENT_MAP = {
   154025450067: "Vitaliy Gorbenko",
 };
 
+// USD to CAD exchange rate (approximate as of January 2025)
+const USD_TO_CAD = 1.36;
+
+// Annual salaries in CAD (USD salaries converted to CAD)
+const SALARY_MAP_ANNUAL = {
+  "Trevor Len": 80000,  // CAD
+  "Shanice Thompson": 80000 * USD_TO_CAD,  // USD → CAD: $108,800
+  "Rodney Sassi": 24000,  // CAD
+  "Graham Rynbend": 48000,  // CAD
+  "Julian Varela": 24000 * USD_TO_CAD,  // USD → CAD: $32,640
+};
+
+// Calculate monthly salaries
+const SALARY_MAP_MONTHLY = Object.fromEntries(
+  Object.entries(SALARY_MAP_ANNUAL).map(([name, annual]) => [name, annual / 12])
+);
+
 const STATUS_COLORS = {
   'Open': '#EF4444',
   'Pending': '#F59E0B',
@@ -56,8 +73,9 @@ const STATUS_COLORS = {
 };
 
 const StaffPerformanceDashboard = ({ tickets, loading }) => {
-  const [sortBy, setSortBy] = useState('total'); // 'total', 'open', 'resolved', 'name'
+  const [sortBy, setSortBy] = useState('total'); // 'total', 'open', 'resolved', 'name', 'efficiency', 'costPerTicket'
   const [selectedAgent, setSelectedAgent] = useState(null);
+  const [showEfficiency, setShowEfficiency] = useState(false); // Toggle for efficiency metrics
 
   if (loading) {
     return (
@@ -119,13 +137,61 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
   // Get unique platforms from all tickets
   const uniquePlatforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])].sort();
 
-  // Convert to array and sort
+  // Convert to array and add efficiency metrics
   let staffArray = Object.values(staffStats);
 
+  // Calculate efficiency metrics for staff with salary data
+  staffArray.forEach(staff => {
+    const monthlySalary = SALARY_MAP_MONTHLY[staff.name];
+
+    if (monthlySalary && staff.total > 0) {
+      staff.monthlySalary = monthlySalary;
+      staff.costPerTicket = monthlySalary / staff.total;
+      staff.hasSalaryData = true;
+    } else {
+      staff.monthlySalary = null;
+      staff.costPerTicket = null;
+      staff.hasSalaryData = false;
+    }
+  });
+
+  // Calculate average metrics for staff with salary data
+  const staffWithSalary = staffArray.filter(s => s.hasSalaryData);
+  const avgTicketsForSalaried = staffWithSalary.length > 0
+    ? staffWithSalary.reduce((sum, s) => sum + s.total, 0) / staffWithSalary.length
+    : 0;
+  const avgSalary = staffWithSalary.length > 0
+    ? staffWithSalary.reduce((sum, s) => sum + s.monthlySalary, 0) / staffWithSalary.length
+    : 0;
+
+  // Calculate efficiency score (normalized)
+  staffArray.forEach(staff => {
+    if (staff.hasSalaryData && avgTicketsForSalaried > 0 && avgSalary > 0) {
+      const ticketRatio = staff.total / avgTicketsForSalaried;
+      const salaryRatio = staff.monthlySalary / avgSalary;
+      staff.efficiencyScore = ticketRatio / salaryRatio;
+    } else {
+      staff.efficiencyScore = null;
+    }
+  });
+
+  // Sort logic
   if (sortBy === 'total') {
     staffArray.sort((a, b) => b.total - a.total);
   } else if (sortBy === 'name') {
     staffArray.sort((a, b) => a.name.localeCompare(b.name));
+  } else if (sortBy === 'efficiency') {
+    staffArray.sort((a, b) => {
+      if (a.efficiencyScore === null) return 1;
+      if (b.efficiencyScore === null) return -1;
+      return b.efficiencyScore - a.efficiencyScore;
+    });
+  } else if (sortBy === 'costPerTicket') {
+    staffArray.sort((a, b) => {
+      if (a.costPerTicket === null) return 1;
+      if (b.costPerTicket === null) return -1;
+      return a.costPerTicket - b.costPerTicket; // Lower cost is better
+    });
   } else {
     // Sort by specific platform
     staffArray.sort((a, b) => (b.byPlatform[sortBy] || 0) - (a.byPlatform[sortBy] || 0));
@@ -138,6 +204,11 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
   // Top performer
   const topPerformer = staffArray[0];
 
+  // Most efficient performer (based on efficiency score)
+  const mostEfficient = staffArray
+    .filter(s => s.efficiencyScore !== null)
+    .sort((a, b) => b.efficiencyScore - a.efficiencyScore)[0];
+
   // Get platform breakdown for selected agent
   const getPlatformBreakdown = (agentName) => {
     const agent = staffStats[agentName];
@@ -147,10 +218,17 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
       .sort((a, b) => b.count - a.count);
   };
 
+  // Helper function to get efficiency color
+  const getEfficiencyColor = (score) => {
+    if (score >= 1.2) return 'text-green-600';
+    if (score >= 0.8) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -179,6 +257,24 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
             <Award className="w-12 h-12 text-green-600 opacity-50" />
           </div>
         </div>
+        <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-amber-800 mb-2">Most Efficient</h3>
+              {mostEfficient ? (
+                <>
+                  <p className="text-lg font-bold text-amber-900">{mostEfficient.name}</p>
+                  <p className="text-sm text-amber-700">
+                    Score: {mostEfficient.efficiencyScore.toFixed(2)}x
+                  </p>
+                </>
+              ) : (
+                <p className="text-lg font-bold text-amber-900">N/A</p>
+              )}
+            </div>
+            <DollarSign className="w-12 h-12 text-amber-600 opacity-50" />
+          </div>
+        </div>
         <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-6">
           <div>
             <h3 className="text-sm font-medium text-gray-800 mb-2">Untracked</h3>
@@ -198,19 +294,41 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
             <Users className="mr-2 w-6 h-6" />
             Staff Performance
           </h2>
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-600">Sort by:</span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          <div className="flex items-center space-x-4">
+            {/* Efficiency Toggle */}
+            <button
+              onClick={() => setShowEfficiency(!showEfficiency)}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-lg border transition-colors ${
+                showEfficiency
+                  ? 'bg-primary-50 border-primary-300 text-primary-700'
+                  : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+              }`}
             >
-              <option value="total">Total Tickets</option>
-              {uniquePlatforms.map((platform) => (
-                <option key={platform} value={platform}>{platform}</option>
-              ))}
-              <option value="name">Name (A-Z)</option>
-            </select>
+              {showEfficiency ? (
+                <Eye className="w-4 h-4" />
+              ) : (
+                <EyeOff className="w-4 h-4" />
+              )}
+              <span className="text-sm font-medium">Efficiency Metrics</span>
+            </button>
+
+            {/* Sort Dropdown */}
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600">Sort by:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="total">Total Tickets</option>
+                {uniquePlatforms.map((platform) => (
+                  <option key={platform} value={platform}>{platform}</option>
+                ))}
+                {showEfficiency && <option value="efficiency">Efficiency Score</option>}
+                {showEfficiency && <option value="costPerTicket">Cost Per Ticket</option>}
+                <option value="name">Name (A-Z)</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -286,6 +404,16 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
                     {platform}
                   </th>
                 ))}
+                {showEfficiency && (
+                  <>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Cost/Ticket
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Efficiency
+                    </th>
+                  </>
+                )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   % of Total
                 </th>
@@ -313,6 +441,26 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
                         {staff.byPlatform[platform] || 0}
                       </td>
                     ))}
+                    {showEfficiency && (
+                      <>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {staff.costPerTicket !== null ? (
+                            <span>${staff.costPerTicket.toFixed(2)}</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
+                          {staff.efficiencyScore !== null ? (
+                            <span className={getEfficiencyColor(staff.efficiencyScore)}>
+                              {staff.efficiencyScore.toFixed(2)}x
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                      </>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {percentage}%
                     </td>
