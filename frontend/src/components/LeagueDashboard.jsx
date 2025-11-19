@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
-import { ExternalLink, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ExternalLink, Search, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 // Blue, purple, and grey color scheme
 const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280', '#9CA3AF'];
@@ -10,6 +10,8 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [sortColumn, setSortColumn] = useState('status'); // Default sort by status
+  const [sortDirection, setSortDirection] = useState('asc'); // 'asc' puts unresolved first
 
   // ARMS Support Product ID for filtering
   const ARMS_PRODUCT_ID = '154000020827';
@@ -25,6 +27,34 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
       Closed: 'bg-gray-100 text-gray-800',
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  // Helper to check if ticket is unresolved
+  const isUnresolved = (status) => {
+    return status !== 'Resolved' && status !== 'Closed';
+  };
+
+  // Handle column sorting
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      // Toggle direction if same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column, default to ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1); // Reset to first page when sorting changes
+  };
+
+  // Render sort icon for column headers
+  const SortIcon = ({ column }) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="w-4 h-4 ml-1 inline opacity-30" />;
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="w-4 h-4 ml-1 inline" />
+      : <ArrowDown className="w-4 h-4 ml-1 inline" />;
   };
 
   // Search and pagination controls component
@@ -164,12 +194,58 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
     );
   }, [platformFilteredTickets, searchQuery]);
 
-  // Paginate search results
+  // Sort ALL tickets before pagination
+  const sortedTickets = useMemo(() => {
+    const ticketsToSort = [...searchFilteredTickets];
+
+    return ticketsToSort.sort((a, b) => {
+      let aValue, bValue;
+
+      switch (sortColumn) {
+        case 'ticket':
+          aValue = Number(a.id);
+          bValue = Number(b.id);
+          break;
+        case 'subject':
+          aValue = (a.subject || a.title || '').toLowerCase();
+          bValue = (b.subject || b.title || '').toLowerCase();
+          break;
+        case 'league':
+          aValue = (a.league || 'Unknown').toLowerCase();
+          bValue = (b.league || 'Unknown').toLowerCase();
+          break;
+        case 'status':
+          // For status, unresolved tickets should come first in 'asc' order
+          const aResolved = !isUnresolved(a.status_name || a.status);
+          const bResolved = !isUnresolved(b.status_name || b.status);
+          if (aResolved !== bResolved) {
+            return sortDirection === 'asc' ? (aResolved ? 1 : -1) : (aResolved ? -1 : 1);
+          }
+          // If both are same resolved/unresolved state, sort alphabetically
+          aValue = (a.status_name || a.status || '').toLowerCase();
+          bValue = (b.status_name || b.status || '').toLowerCase();
+          break;
+        case 'created':
+          aValue = new Date(a.created_at).getTime();
+          bValue = new Date(b.created_at).getTime();
+          break;
+        default:
+          return 0;
+      }
+
+      // Handle comparison
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [searchFilteredTickets, sortColumn, sortDirection]);
+
+  // Paginate sorted results
   const paginatedTickets = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    return searchFilteredTickets.slice(startIndex, endIndex);
-  }, [searchFilteredTickets, currentPage, pageSize]);
+    return sortedTickets.slice(startIndex, endIndex);
+  }, [sortedTickets, currentPage, pageSize]);
 
   const totalPages = Math.ceil(searchFilteredTickets.length / pageSize);
   const startIndex = (currentPage - 1) * pageSize + 1;
@@ -274,17 +350,33 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            onClick={() => handleSort('ticket')}
+                          >
                             Ticket #
+                            <SortIcon column="ticket" />
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            onClick={() => handleSort('subject')}
+                          >
                             Subject
+                            <SortIcon column="subject" />
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            onClick={() => handleSort('status')}
+                          >
                             Status
+                            <SortIcon column="status" />
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            onClick={() => handleSort('created')}
+                          >
                             Created
+                            <SortIcon column="created" />
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Actions
@@ -419,20 +511,40 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort('ticket')}
+                        >
                           Ticket #
+                          <SortIcon column="ticket" />
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort('subject')}
+                        >
                           Subject
+                          <SortIcon column="subject" />
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort('league')}
+                        >
                           League
+                          <SortIcon column="league" />
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort('status')}
+                        >
                           Status
+                          <SortIcon column="status" />
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => handleSort('created')}
+                        >
                           Created
+                          <SortIcon column="created" />
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
