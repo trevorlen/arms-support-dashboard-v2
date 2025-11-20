@@ -646,7 +646,11 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick, dateRange }) => {
                         return null;
                       }}
                     />
-                    <Bar dataKey="count" name="Tickets" radius={[0, 8, 8, 0]}>
+                    <Bar dataKey="count" name="Tickets" radius={[0, 8, 8, 0]} onClick={(data) => {
+                      if (data && data.name) {
+                        setSelectedLeague(data.name);
+                      }
+                    }}>
                       {leagueData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="hover:opacity-80 transition-opacity cursor-pointer" />
                       ))}

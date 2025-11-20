@@ -178,13 +178,21 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
         return false;
       }
 
-      // Include ALL unresolved issues (regardless of date)
+      // Include ALL unresolved issues that were created within or before the date range
       if (isUnresolved(status)) {
-        return true;
+        // Only show unresolved tickets if they were created on or before the end date
+        if (dateRangeEnd && createdDate <= dateRangeEnd) {
+          return true;
+        }
+        // If no date range, show all unresolved
+        if (!dateRangeEnd) {
+          return true;
+        }
+        return false;
       }
 
       // Include resolved/closed issues created within the selected date range
-      if (dateRangeStart && createdDate >= dateRangeStart) {
+      if (dateRangeStart && createdDate >= dateRangeStart && dateRangeEnd && createdDate <= dateRangeEnd) {
         return true;
       }
 
