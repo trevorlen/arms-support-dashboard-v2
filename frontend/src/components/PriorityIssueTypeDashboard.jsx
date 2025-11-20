@@ -94,27 +94,21 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
   const totalPriority = priorityData.reduce((sum, item) => sum + item.count, 0);
 
   // Calculate static System Issues and User Issues counts
-  // Include ALL unresolved issues + resolved issues created within the date range (matching table logic)
+  // Count ALL tickets (any status) created within the selected date range
   const dateRangeStart = dateRange?.start_date ? new Date(dateRange.start_date) : null;
   const dateRangeEnd = dateRange?.end_date ? new Date(dateRange.end_date) : null;
 
   const systemIssuesCount = useMemo(() => {
     return tickets.data.filter(ticket => {
       const issueType = ticket.issue_type || ticket.custom_fields?.cf_issue_type || '';
-      const status = ticket.status_name || ticket.status;
       const createdDate = ticket.created_at ? new Date(ticket.created_at) : null;
 
       // Must be System Issue type
       if (issueType !== 'System Issue') return false;
 
-      // Include ALL unresolved issues (regardless of date)
-      if (isUnresolved(status)) {
-        return true;
-      }
-
-      // Include resolved/closed issues created within the selected date range
-      if (dateRangeStart && createdDate >= dateRangeStart) {
-        return true;
+      // Only count tickets created within the date range (regardless of status)
+      if (dateRangeStart && dateRangeEnd && createdDate) {
+        return createdDate >= dateRangeStart && createdDate <= dateRangeEnd;
       }
 
       return false;
@@ -124,20 +118,14 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
   const userIssuesCount = useMemo(() => {
     return tickets.data.filter(ticket => {
       const issueType = ticket.issue_type || ticket.custom_fields?.cf_issue_type || '';
-      const status = ticket.status_name || ticket.status;
       const createdDate = ticket.created_at ? new Date(ticket.created_at) : null;
 
       // Must be User Issue type
       if (issueType !== 'User Issue') return false;
 
-      // Include ALL unresolved issues (regardless of date)
-      if (isUnresolved(status)) {
-        return true;
-      }
-
-      // Include resolved/closed issues created within the selected date range
-      if (dateRangeStart && createdDate >= dateRangeStart) {
-        return true;
+      // Only count tickets created within the date range (regardless of status)
+      if (dateRangeStart && dateRangeEnd && createdDate) {
+        return createdDate >= dateRangeStart && createdDate <= dateRangeEnd;
       }
 
       return false;

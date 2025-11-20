@@ -619,13 +619,9 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick, dateRange }) => {
             {/* League Bar Chart - Clickable */}
             <div className="mb-8">
               <p className="text-sm text-gray-600 mb-4">Click on a league to drill down into teams</p>
-              <div className="cursor-pointer">
+              <div>
                 <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={leagueData} layout="vertical" onClick={(data) => {
-                    if (data && data.activePayload && data.activePayload.length > 0) {
-                      setSelectedLeague(data.activePayload[0].payload.name);
-                    }
-                  }}>
+                  <BarChart data={leagueData} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
                     <YAxis dataKey="name" type="category" width={70} tick={<CustomYAxisTick />} />
