@@ -2,6 +2,9 @@ import React, { useMemo } from 'react';
 import { TrendingUp, AlertTriangle, CheckCircle, Clock, Timer, ArrowUpRight, ArrowDownRight, Target } from 'lucide-react';
 
 const KPICards = ({ stats, tickets, loading, dateRange }) => {
+  // ARMS Support Product ID for filtering
+  const ARMS_PRODUCT_ID = '154000020827';
+
   // Calculate metrics for current and previous periods
   const { currentMetrics, previousMetrics, trends } = useMemo(() => {
     if (!tickets?.data || !dateRange) {
@@ -30,10 +33,11 @@ const KPICards = ({ stats, tickets, loading, dateRange }) => {
       return status === 'Resolved' || status === 'Closed';
     };
 
-    // Calculate metrics for current period
-    const currentCreated = tickets.data.filter(t =>
-      t.created_at && isInRange(t.created_at, currentStart, currentEnd)
-    );
+    // Calculate metrics for current period (filter by ARMS Support product and date range)
+    const currentCreated = tickets.data.filter(t => {
+      const matchesProduct = !t.product_id || String(t.product_id) === ARMS_PRODUCT_ID;
+      return matchesProduct && t.created_at && isInRange(t.created_at, currentStart, currentEnd);
+    });
 
     const currentResolved = currentCreated.filter(isResolved);
 
@@ -47,10 +51,11 @@ const KPICards = ({ stats, tickets, loading, dateRange }) => {
       ? currentResponseTimes[Math.floor(currentResponseTimes.length / 2)]
       : 0;
 
-    // Calculate metrics for previous period
-    const previousCreated = tickets.data.filter(t =>
-      t.created_at && isInRange(t.created_at, previousStart, previousEnd)
-    );
+    // Calculate metrics for previous period (filter by ARMS Support product and date range)
+    const previousCreated = tickets.data.filter(t => {
+      const matchesProduct = !t.product_id || String(t.product_id) === ARMS_PRODUCT_ID;
+      return matchesProduct && t.created_at && isInRange(t.created_at, previousStart, previousEnd);
+    });
 
     const previousResolved = previousCreated.filter(isResolved);
 
@@ -125,7 +130,7 @@ const KPICards = ({ stats, tickets, loading, dateRange }) => {
   const ticketsResolved = currentMetrics.resolved || 0;
   const medianResponseTime = currentMetrics.medianResponseTime || 0;
 
-  // Calculate priority breakdown from tickets data (filtered by date range)
+  // Calculate priority breakdown from tickets data (filtered by date range and product)
   const priorityBreakdown = useMemo(() => {
     if (!tickets?.data || !dateRange) return { Urgent: 0, High: 0, Medium: 0, Low: 0, total: 0 };
 
@@ -140,8 +145,11 @@ const KPICards = ({ stats, tickets, loading, dateRange }) => {
     };
 
     tickets.data.forEach((ticket) => {
+      // Filter by product_id to ensure only ARMS Support tickets
+      const matchesProduct = !ticket.product_id || String(ticket.product_id) === ARMS_PRODUCT_ID;
+
       // Filter by date range
-      if (ticket.created_at) {
+      if (matchesProduct && ticket.created_at) {
         const ticketDate = new Date(ticket.created_at);
         if (ticketDate >= currentStart && ticketDate <= currentEnd) {
           const priority = ticket.priority_name || ticket.priority || 'Unknown';

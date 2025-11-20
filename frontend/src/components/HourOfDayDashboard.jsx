@@ -23,6 +23,9 @@ const HourOfDayDashboard = ({ tickets, loading, dateRange }) => {
     );
   }
 
+  // ARMS Support Product ID for filtering
+  const ARMS_PRODUCT_ID = '154000020827';
+
   // Filter tickets by date range
   const startDate = dateRange ? new Date(dateRange.start_date) : null;
   const endDate = dateRange ? new Date(dateRange.end_date) : null;
@@ -31,6 +34,10 @@ const HourOfDayDashboard = ({ tickets, loading, dateRange }) => {
   const platforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])].sort();
   const platformTotals = {};
   tickets?.data?.forEach((ticket) => {
+    // Filter by product_id to ensure only ARMS Support tickets
+    const matchesProduct = !ticket.product_id || String(ticket.product_id) === ARMS_PRODUCT_ID;
+    if (!matchesProduct) return;
+
     const platform = ticket.platform || 'Unknown';
     platformTotals[platform] = (platformTotals[platform] || 0) + 1;
   });
@@ -40,6 +47,10 @@ const HourOfDayDashboard = ({ tickets, loading, dateRange }) => {
     ? tickets?.data || []
     : tickets?.data?.filter(t => (t.platform || 'Unknown') === selectedPlatform) || [])
     .filter((ticket) => {
+      // Filter by product_id to ensure only ARMS Support tickets
+      const matchesProduct = !ticket.product_id || String(ticket.product_id) === ARMS_PRODUCT_ID;
+      if (!matchesProduct) return false;
+
       // Filter by date range
       if (startDate && endDate && ticket.created_at) {
         const ticketDate = new Date(ticket.created_at);

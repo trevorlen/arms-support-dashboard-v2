@@ -22,6 +22,9 @@ const TicketTypesDashboard = ({ tickets, summary, loading, dateRange }) => {
   const [expandedTypes, setExpandedTypes] = useState({});
   const [selectedPlatform, setSelectedPlatform] = useState('all');
 
+  // ARMS Support Product ID for filtering
+  const ARMS_PRODUCT_ID = '154000020827';
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -52,6 +55,10 @@ const TicketTypesDashboard = ({ tickets, summary, loading, dateRange }) => {
   // Build two-level structure: custom_ticket_type -> issue_type
   const hierarchy = {};
   filteredTickets.forEach((ticket) => {
+    // Filter by product_id to ensure only ARMS Support tickets
+    const matchesProduct = !ticket.product_id || String(ticket.product_id) === ARMS_PRODUCT_ID;
+    if (!matchesProduct) return;
+
     // Filter by date range
     if (startDate && endDate) {
       const ticketDate = new Date(ticket.created_at);

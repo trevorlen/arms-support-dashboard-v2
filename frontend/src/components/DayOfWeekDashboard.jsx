@@ -27,6 +27,9 @@ const DayOfWeekDashboard = ({ tickets, loading, dateRange }) => {
     );
   }
 
+  // ARMS Support Product ID for filtering
+  const ARMS_PRODUCT_ID = '154000020827';
+
   // Filter tickets by date range
   const startDate = dateRange ? new Date(dateRange.start_date) : null;
   const endDate = dateRange ? new Date(dateRange.end_date) : null;
@@ -35,6 +38,10 @@ const DayOfWeekDashboard = ({ tickets, loading, dateRange }) => {
   const platforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])].sort();
   const platformTotals = {};
   tickets?.data?.forEach((ticket) => {
+    // Filter by product_id to ensure only ARMS Support tickets
+    const matchesProduct = !ticket.product_id || String(ticket.product_id) === ARMS_PRODUCT_ID;
+    if (!matchesProduct) return;
+
     const platform = ticket.platform || 'Unknown';
     platformTotals[platform] = (platformTotals[platform] || 0) + 1;
   });
@@ -51,6 +58,10 @@ const DayOfWeekDashboard = ({ tickets, loading, dateRange }) => {
   filteredTickets.forEach((ticket) => {
     if (ticket.created_at) {
       try {
+        // Filter by product_id to ensure only ARMS Support tickets
+        const matchesProduct = !ticket.product_id || String(ticket.product_id) === ARMS_PRODUCT_ID;
+        if (!matchesProduct) return;
+
         const date = parseISO(ticket.created_at);
 
         // Filter by date range
