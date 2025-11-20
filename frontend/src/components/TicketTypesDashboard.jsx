@@ -93,7 +93,8 @@ const TicketTypesDashboard = ({ tickets, summary, loading, dateRange }) => {
     }))
     .sort((a, b) => b.count - a.count);
 
-  const total = filteredTickets.length || 0;
+  // Calculate total from hierarchy (which has proper date/product filtering applied)
+  const total = ticketTypes.reduce((sum, type) => sum + type.count, 0);
 
   const toggleExpanded = (type) => {
     setExpandedTypes(prev => ({
