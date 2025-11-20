@@ -111,6 +111,18 @@ export const getDevOpsItems = async (params = {}) => {
 };
 
 /**
+ * Fetch a single DevOps work item by ID
+ */
+export const getDevOpsItem = async (workItemId) => {
+  try {
+    const response = await api.get(`/devops/${workItemId}`);
+    return response.data;
+  } catch (error) {
+    throw new Error(`Failed to fetch DevOps item: ${error.message}`);
+  }
+};
+
+/**
  * Fetch API health status
  */
 export const getHealth = async () => {

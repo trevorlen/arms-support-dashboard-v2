@@ -678,8 +678,135 @@ def summary(req: func.HttpRequest) -> func.HttpResponse:
         )
 
 # ============================================================================
-# Azure DevOps Work Items Endpoint
+# Azure DevOps Work Items Endpoints
 # ============================================================================
+
+@app.route(route="devops/{id}", auth_level=func.AuthLevel.ANONYMOUS)
+def get_devops_item(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Fetch a single Azure DevOps work item by ID
+    Returns: Full work item details including all fields
+    """
+    logging.info("Fetching single Azure DevOps work item")
+
+    # Get work item ID from route parameter
+    work_item_id = req.route_params.get('id')
+
+    if not work_item_id:
+        return func.HttpResponse(
+            body=json.dumps({"error": "Work item ID is required"}),
+            mimetype="application/json",
+            status_code=400
+        )
+
+    # Check for Azure DevOps credentials
+    org = os.environ.get('AZURE_DEVOPS_ORG')
+    project = os.environ.get('AZURE_DEVOPS_PROJECT')
+    pat = os.environ.get('AZURE_DEVOPS_PAT')
+
+    if not all([org, project, pat]):
+        logging.warning("Azure DevOps credentials not configured")
+        return func.HttpResponse(
+            body=json.dumps({"error": "Azure DevOps credentials not configured"}),
+            mimetype="application/json",
+            status_code=500
+        )
+
+    try:
+        # Azure DevOps API setup
+        base_url = f"https://dev.azure.com/{org}/{project}/_apis"
+        auth = ('', pat)  # Username is empty for PAT authentication
+        headers = {'Content-Type': 'application/json'}
+
+        # Get work item details
+        work_item_url = f"{base_url}/wit/workitems/{work_item_id}?api-version=7.2-preview.3"
+        logging.info(f"Fetching work item: {work_item_url}")
+
+        response = requests.get(
+            work_item_url,
+            auth=auth,
+            headers=headers,
+            timeout=30
+        )
+        response.raise_for_status()
+        work_item = response.json()
+
+        # Process and format the work item
+        fields = work_item.get('fields', {})
+
+        # Extract Freshdesk ticket ID from custom field
+        freshdesk_link = fields.get('Custom.FreshdeskLink', '')
+        freshdesk_ticket_id = freshdesk_link if freshdesk_link else None
+
+        # Extract assigned user (System.AssignedTo is an object with displayName)
+        assigned_to_obj = fields.get('System.AssignedTo', {})
+        assigned_to = assigned_to_obj.get('displayName', 'Unassigned') if assigned_to_obj else 'Unassigned'
+
+        # Format the response with commonly used fields at root level for easy access
+        result = {
+            'id': work_item.get('id'),
+            'title': fields.get('System.Title', 'Untitled'),
+            'work_item_type': fields.get('System.WorkItemType', 'Unknown'),
+            'state': fields.get('System.State', 'Unknown'),
+            'created_date': fields.get('System.CreatedDate'),
+            'changed_date': fields.get('System.ChangedDate'),
+            'area_path': fields.get('System.AreaPath'),
+            'iteration_path': fields.get('System.IterationPath'),
+            'tags': fields.get('System.Tags', ''),
+            'priority': fields.get('Microsoft.VSTS.Common.Priority'),
+            'description': fields.get('System.Description'),
+            'freshdesk_ticket_id': freshdesk_ticket_id,
+            'assigned_to': assigned_to,
+            'url': work_item.get('_links', {}).get('html', {}).get('href', f"https://dev.azure.com/{org}/{project}/_workitems/edit/{work_item_id}"),
+            # Include all fields for flexibility
+            'fields': fields,
+            '_links': work_item.get('_links', {})
+        }
+
+        # Extract custom Freshdesk link in a nested structure if available
+        if freshdesk_link:
+            result['custom'] = {'freshdesklink': freshdesk_link}
+
+        logging.info(f"Successfully fetched work item {work_item_id}")
+
+        return func.HttpResponse(
+            body=json.dumps({
+                "success": True,
+                "workItem": result
+            }),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            logging.warning(f"Work item not found: {work_item_id}")
+            return func.HttpResponse(
+                body=json.dumps({"error": "Work item not found"}),
+                mimetype="application/json",
+                status_code=404
+            )
+        logging.error(f"HTTP error fetching work item: {str(e)}")
+        return func.HttpResponse(
+            body=json.dumps({"error": f"Failed to fetch work item: {str(e)}"}),
+            mimetype="application/json",
+            status_code=500
+        )
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Request error: {str(e)}")
+        return func.HttpResponse(
+            body=json.dumps({"error": f"Request failed: {str(e)}"}),
+            mimetype="application/json",
+            status_code=500
+        )
+    except Exception as e:
+        logging.error(f"Unexpected error fetching work item: {str(e)}")
+        return func.HttpResponse(
+            body=json.dumps({"error": f"Unexpected error: {str(e)}"}),
+            mimetype="application/json",
+            status_code=500
+        )
+
 
 @app.route(route="devops", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
 def get_devops_items(req: func.HttpRequest) -> func.HttpResponse:

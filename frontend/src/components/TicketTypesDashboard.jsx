@@ -11,6 +11,7 @@ import {
   Cell,
 } from 'recharts';
 import { ChevronRight, ChevronDown } from 'lucide-react';
+import PlatformLogo from './PlatformLogo';
 
 // Blue, purple, and grey color scheme
 const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280', '#9CA3AF'];
@@ -113,19 +114,19 @@ const TicketTypesDashboard = ({ tickets, summary, loading }) => {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            All Platforms ({tickets?.data?.length || 0})
+            All Platforms
           </button>
           {platforms.map((platform, index) => (
             <button
               key={index}
               onClick={() => setSelectedPlatform(platform)}
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
                 selectedPlatform === platform
                   ? 'bg-primary-600 text-white shadow-md'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {platform} ({platformTotals[platform]})
+              <PlatformLogo platform={platform} size="small" />
             </button>
           ))}
         </div>
@@ -137,7 +138,9 @@ const TicketTypesDashboard = ({ tickets, summary, loading }) => {
           <span className="mr-2">📋</span>
           Ticket Types
           {selectedPlatform !== 'all' && (
-            <span className="ml-2 text-lg text-primary-600">- {selectedPlatform}</span>
+            <span className="ml-2 flex items-center gap-2">
+              - <PlatformLogo platform={selectedPlatform} size="medium" />
+            </span>
           )}
         </h2>
 

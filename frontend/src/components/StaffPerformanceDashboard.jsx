@@ -89,7 +89,7 @@ const STATUS_COLORS = {
 };
 
 const StaffPerformanceDashboard = ({ tickets, loading }) => {
-  const [sortBy, setSortBy] = useState('total'); // 'total', 'open', 'resolved', 'name', 'efficiency', 'costPerTicket'
+  const [selectedPlatform, setSelectedPlatform] = useState('All Platforms'); // Platform filter
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [showEfficiency, setShowEfficiency] = useState(false); // Toggle for efficiency metrics
   const [showEfficiencyTooltip, setShowEfficiencyTooltip] = useState(false); // Tooltip for efficiency explanation
@@ -182,6 +182,10 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
     );
   }
 
+  // Get unique platforms from all tickets (for filter dropdown)
+  const allPlatforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])].sort();
+  const platformOptions = ['All Platforms', ...allPlatforms];
+
   // Build staff performance data
   const staffStats = {};
   let unassignedCount = 0;
@@ -193,6 +197,12 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
   tickets?.data?.forEach((ticket) => {
     // Filter by product_id to ensure only ARMS Support tickets are counted
     if (ticket.product_id && String(ticket.product_id) !== ARMS_PRODUCT_ID) {
+      return;
+    }
+
+    // Filter by selected platform
+    const ticketPlatform = ticket.platform || 'Unknown';
+    if (selectedPlatform !== 'All Platforms' && ticketPlatform !== selectedPlatform) {
       return;
     }
 
@@ -232,7 +242,17 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
   // Get unique platforms from all tickets and shorten labels
   const uniquePlatforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])]
     .sort()
-    .map(p => p === 'Multisport' ? 'MULTI' : p);
+    .map(p => {
+      if (p === 'Multisport') return 'MULTI';
+      if (p === 'Unknown') return 'UNDEFINED';
+      return p;
+    })
+    .sort((a, b) => {
+      // Move UNDEFINED to the end
+      if (a === 'UNDEFINED') return 1;
+      if (b === 'UNDEFINED') return -1;
+      return a.localeCompare(b);
+    });
 
   // Calculate date range from tickets (earliest to latest date)
   let dateRangeInDays = 30; // Default to 30 days if no tickets
@@ -298,6 +318,24 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
     } else {
       staff.ticketsPerHour = null;
     }
+
+    // Calculate average sentiment improvement
+    // Only count tickets with both sentiment_score and initial_sentiment_score
+    const ticketsWithSentiment = staff.tickets.filter(t =>
+      t.sentiment_score != null &&
+      t.initial_sentiment_score != null
+    );
+
+    if (ticketsWithSentiment.length > 0) {
+      const totalSentimentChange = ticketsWithSentiment.reduce((sum, ticket) => {
+        return sum + (ticket.sentiment_score - ticket.initial_sentiment_score);
+      }, 0);
+      staff.avgSentimentImprovement = totalSentimentChange / ticketsWithSentiment.length;
+      staff.sentimentTicketCount = ticketsWithSentiment.length;
+    } else {
+      staff.avgSentimentImprovement = null;
+      staff.sentimentTicketCount = 0;
+    }
   });
 
   // Calculate average metrics for staff with salary data (FTE-adjusted)
@@ -324,33 +362,8 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
   });
 
 
-  // Sort logic
-  if (sortBy === 'total') {
-    staffArray.sort((a, b) => b.total - a.total);
-  } else if (sortBy === 'name') {
-    staffArray.sort((a, b) => a.name.localeCompare(b.name));
-  } else if (sortBy === 'efficiency') {
-    staffArray.sort((a, b) => {
-      if (a.efficiencyScore === null) return 1;
-      if (b.efficiencyScore === null) return -1;
-      return b.efficiencyScore - a.efficiencyScore;
-    });
-  } else if (sortBy === 'costPerTicket') {
-    staffArray.sort((a, b) => {
-      if (a.costPerTicket === null) return 1;
-      if (b.costPerTicket === null) return -1;
-      return a.costPerTicket - b.costPerTicket; // Lower cost is better
-    });
-  } else if (sortBy === 'ticketsPerHour') {
-    staffArray.sort((a, b) => {
-      if (a.ticketsPerHour === null) return 1;
-      if (b.ticketsPerHour === null) return -1;
-      return b.ticketsPerHour - a.ticketsPerHour; // Higher tickets per hour is better
-    });
-  } else {
-    // Sort by specific platform
-    staffArray.sort((a, b) => (b.byPlatform[sortBy] || 0) - (a.byPlatform[sortBy] || 0));
-  }
+  // Sort by total tickets (descending)
+  staffArray.sort((a, b) => b.total - a.total);
 
   const totalTickets = staffArray.reduce((sum, staff) => sum + staff.total, 0);
   const totalStaff = staffArray.length;
@@ -363,6 +376,13 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
   const mostEfficient = staffArray
     .filter(s => s.efficiencyScore !== null)
     .sort((a, b) => b.efficiencyScore - a.efficiencyScore)[0];
+
+  // Calculate overall average satisfaction delta across all staff
+  const staffWithSentiment = staffArray.filter(s => s.avgSentimentImprovement !== null);
+  const overallAvgSatisfactionDelta = staffWithSentiment.length > 0
+    ? staffWithSentiment.reduce((sum, s) => sum + s.avgSentimentImprovement, 0) / staffWithSentiment.length
+    : null;
+  const totalSentimentTickets = staffArray.reduce((sum, s) => sum + s.sentimentTicketCount, 0);
 
   // Get platform breakdown for selected agent
   const getPlatformBreakdown = (agentName) => {
@@ -430,14 +450,30 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
             <DollarSign className="w-12 h-12 text-amber-600 opacity-50" />
           </div>
         </div>
-        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-6">
-          <div>
-            <h3 className="text-sm font-medium text-gray-800 mb-2">Untracked</h3>
-            <p className="text-lg font-bold text-gray-900">
-              {unassignedCount > 0 && <span className="block">Unassigned: {unassignedCount}</span>}
-              {unknownAgentCount > 0 && <span className="block">Unknown Agent: {unknownAgentCount}</span>}
-              {unassignedCount === 0 && unknownAgentCount === 0 && <span className="text-3xl">✓</span>}
-            </p>
+        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-indigo-800 mb-2">Avg Satisfaction Δ</h3>
+              {overallAvgSatisfactionDelta !== null ? (
+                <>
+                  <p className={`text-3xl font-bold ${
+                    overallAvgSatisfactionDelta > 0 ? 'text-green-600' :
+                    overallAvgSatisfactionDelta < 0 ? 'text-red-600' :
+                    'text-gray-600'
+                  }`}>
+                    {overallAvgSatisfactionDelta > 0 ? '+' : ''}{overallAvgSatisfactionDelta.toFixed(1)}
+                  </p>
+                  <p className="text-xs text-indigo-700 mt-1">{totalSentimentTickets} tickets</p>
+                </>
+              ) : (
+                <p className="text-lg font-bold text-gray-900">N/A</p>
+              )}
+            </div>
+            <TrendingUp className={`w-12 h-12 opacity-50 ${
+              overallAvgSatisfactionDelta !== null && overallAvgSatisfactionDelta > 0
+                ? 'text-green-600'
+                : 'text-indigo-600'
+            }`} />
           </div>
         </div>
       </div>
@@ -448,24 +484,22 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
           <h2 className="text-2xl font-bold text-gray-900 flex items-center">
             <Users className="mr-2 w-6 h-6" />
             Staff Performance
+            {selectedPlatform !== 'All Platforms' && (
+              <span className="ml-2 text-lg text-primary-600">- {selectedPlatform}</span>
+            )}
           </h2>
           <div className="flex items-center space-x-4">
-            {/* Sort Dropdown */}
+            {/* Platform Filter Dropdown */}
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-600">Sort by:</span>
+              <span className="text-sm text-gray-600">Platform:</span>
               <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+                value={selectedPlatform}
+                onChange={(e) => setSelectedPlatform(e.target.value)}
                 className="border border-gray-300 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               >
-                <option value="total">Total Tickets</option>
-                {uniquePlatforms.map((platform) => (
+                {platformOptions.map((platform) => (
                   <option key={platform} value={platform}>{platform}</option>
                 ))}
-                {showEfficiency && <option value="efficiency">Efficiency Score</option>}
-                {showEfficiency && <option value="costPerTicket">Cost Per Ticket</option>}
-                {showEfficiency && <option value="ticketsPerHour">Tickets/Hour</option>}
-                <option value="name">Name (A-Z)</option>
               </select>
             </div>
           </div>
@@ -550,7 +584,7 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Staff Member
                 </th>
                 <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -601,25 +635,45 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
                         </div>
                       </div>
                     </th>
+                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <div className="flex items-center justify-center gap-1 relative group">
+                        <span>Satisfaction Δ</span>
+                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                        <div className="absolute left-1/2 transform -translate-x-1/2 top-full mt-2 w-52 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 normal-case">
+                          <div className="font-semibold mb-1">Average Satisfaction Change</div>
+                          <div className="text-gray-200">
+                            Measures how much customer satisfaction improved from ticket creation to resolution. Scale: 0-100.
+                            <div className="mt-1">
+                              <span className="text-green-400">Positive</span> = improved satisfaction
+                            </div>
+                          </div>
+                          <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+                        </div>
+                      </div>
+                    </th>
                   </>
                 )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {staffArray.map((staff, index) => {
+              {staffArray.filter(staff => {
+                // Only show these 5 staff members in the table
+                const displayNames = ['Trevor Len', 'Rodney Sassi', 'Graham Rynbend', 'Shanice Thompson', 'Julian Varela'];
+                return displayNames.includes(staff.name);
+              }).map((staff, index) => {
                 const percentage = Math.round((staff.total / totalTickets) * 100);
                 return (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
+                    <td className="px-2 py-2 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 max-w-[180px]">
                         <div
-                          className="w-3 h-3 rounded-full"
+                          className="w-3 h-3 rounded-full flex-shrink-0"
                           style={{ backgroundColor: COLORS[index % COLORS.length] }}
                         ></div>
-                        <span className="text-sm font-medium text-gray-900">{staff.name}</span>
+                        <span className="text-sm font-medium text-gray-900 truncate">{staff.name}</span>
                         {staff.onLeave && (
                           <span
-                            className="px-2 py-0.5 text-[10px] font-semibold bg-purple-100 text-purple-700 rounded border border-purple-300"
+                            className="px-1.5 py-0.5 text-[10px] font-semibold bg-purple-100 text-purple-700 rounded border border-purple-300 flex-shrink-0"
                             title={`${staff.leaveType}: ${staff.leaveDays} days during this period (adjusted metrics)`}
                           >
                             {staff.leaveType}
@@ -632,7 +686,7 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
                     </td>
                     {!showEfficiency && uniquePlatforms.map((platform) => (
                       <td key={platform} className="px-2 py-2 whitespace-nowrap text-sm text-gray-600 text-center">
-                        {staff.byPlatform[platform] || 0}
+                        {staff.byPlatform[platform === 'UNDEFINED' ? 'Unknown' : platform === 'MULTI' ? 'Multisport' : platform] || 0}
                       </td>
                     ))}
                     {showEfficiency && (
@@ -660,6 +714,25 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-center">
+                          {staff.avgSentimentImprovement !== null ? (
+                            <span
+                              className={`font-semibold ${
+                                staff.avgSentimentImprovement > 0
+                                  ? 'text-green-700'
+                                  : staff.avgSentimentImprovement < 0
+                                  ? 'text-red-700'
+                                  : 'text-gray-600'
+                              }`}
+                              title={`Based on ${staff.sentimentTicketCount} ticket${staff.sentimentTicketCount !== 1 ? 's' : ''} with sentiment data`}
+                            >
+                              {staff.avgSentimentImprovement > 0 ? '+' : ''}
+                              {staff.avgSentimentImprovement.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
                       </>
                     )}
                   </tr>
@@ -676,7 +749,7 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
                 </td>
                 {!showEfficiency && uniquePlatforms.map((platform) => (
                   <td key={platform} className="px-2 py-2 whitespace-nowrap text-sm text-gray-900 text-center">
-                    {staffArray.reduce((sum, s) => sum + (s.byPlatform[platform] || 0), 0)}
+                    {staffArray.reduce((sum, s) => sum + (s.byPlatform[platform === 'UNDEFINED' ? 'Unknown' : platform === 'MULTI' ? 'Multisport' : platform] || 0), 0)}
                   </td>
                 ))}
               </tr>

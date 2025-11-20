@@ -1,8 +1,22 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import PlatformLogo from './PlatformLogo';
 
 // Blue, purple, and grey color scheme
 const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280', '#9CA3AF'];
+
+// Custom tick component to render platform logos
+const CustomXAxisTick = ({ x, y, payload }) => {
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <foreignObject x={-24} y={0} width={48} height={60}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <PlatformLogo platform={payload.value} size={{ height: '48px', width: 'auto' }} />
+        </div>
+      </foreignObject>
+    </g>
+  );
+};
 
 const PlatformDashboard = ({ summary, tickets, loading }) => {
   if (loading) {
@@ -15,7 +29,21 @@ const PlatformDashboard = ({ summary, tickets, loading }) => {
     );
   }
 
-  const platformData = Object.entries(summary?.by_platform || {}).map(([name, count]) => ({
+  // ARMS Support Product ID for filtering
+  const ARMS_PRODUCT_ID = '154000020827';
+
+  // Calculate platform counts from tickets (ensures product_id filtering is applied)
+  const platformCounts = {};
+  tickets?.data?.forEach((ticket) => {
+    // Filter by product_id to ensure only ARMS Support tickets
+    const matchesProduct = !ticket.product_id || String(ticket.product_id) === ARMS_PRODUCT_ID;
+    if (!matchesProduct) return;
+
+    const platform = ticket.platform || 'Unknown';
+    platformCounts[platform] = (platformCounts[platform] || 0) + 1;
+  });
+
+  const platformData = Object.entries(platformCounts).map(([name, count]) => ({
     name: name || 'Unknown',
     count,
   })).sort((a, b) => b.count - a.count);
@@ -26,9 +54,12 @@ const PlatformDashboard = ({ summary, tickets, loading }) => {
   const getTicketTypeBreakdown = (platformName) => {
     if (!tickets?.data) return {};
 
-    const platformTickets = tickets.data.filter(
-      ticket => (ticket.platform || 'Unknown') === platformName
-    );
+    const platformTickets = tickets.data.filter(ticket => {
+      // Filter by product_id to ensure only ARMS Support tickets
+      const matchesProduct = !ticket.product_id || String(ticket.product_id) === ARMS_PRODUCT_ID;
+      const matchesPlatform = (ticket.platform || 'Unknown') === platformName;
+      return matchesProduct && matchesPlatform;
+    });
 
     const breakdown = {};
     platformTickets.forEach(ticket => {
@@ -58,7 +89,7 @@ const PlatformDashboard = ({ summary, tickets, loading }) => {
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={platformData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
+                  <XAxis dataKey="name" tick={<CustomXAxisTick />} height={60} />
                   <YAxis />
                   <Tooltip
                     content={({ active, payload }) => {
@@ -101,66 +132,6 @@ const PlatformDashboard = ({ summary, tickets, loading }) => {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-
-            {/* Platform Table */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-700 mb-4">Platform Breakdown</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Platform
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Tickets
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Percentage
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Visual
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {platformData.map((platform, index) => {
-                      const percentage = ((platform.count / total) * 100).toFixed(1);
-                      return (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div
-                                className="w-3 h-3 rounded-full mr-3"
-                                style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                              ></div>
-                              <span className="text-sm font-medium text-gray-900">{platform.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-                            {platform.count}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {percentage}%
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div
-                                className="h-2 rounded-full"
-                                style={{
-                                  width: `${percentage}%`,
-                                  backgroundColor: COLORS[index % COLORS.length],
-                                }}
-                              ></div>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
             </div>
           </>
         )}

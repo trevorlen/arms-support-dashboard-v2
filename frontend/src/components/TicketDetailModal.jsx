@@ -4,6 +4,36 @@ import { getTicket } from '../services/api';
 import TicketTimeline from './TicketTimeline';
 import DevOpsLink from './DevOpsLink';
 
+// Agent ID to Name mapping
+const AGENT_MAP = {
+  154014816019: "Aaron Bourdeaux",
+  154024618731: "Amey Patil",
+  154021352180: "August Heza",
+  154025663695: "Benjamin Lam",
+  154025424111: "Chaya Pothuraju",
+  154037322257: "Christina Ganung",
+  154025424352: "Daren Lam",
+  154039475394: "Eduardo Salazar",
+  154025660131: "Erwin Fiten",
+  154003138960: "Graham Rynbend",
+  154033310397: "Jeremy Paradise",
+  154025424364: "Jigar Gajjar",
+  154037328933: "Jonathan.corbett",
+  154017198579: "Julian Varela",
+  154025441279: "Laura Munne",
+  154003130993: "Lucas Borgo",
+  154020756052: "Majid Taheri",
+  154027750229: "Omorogbe Osagie",
+  154007760706: "Pradeep Raghupatruni",
+  154003130959: "Reg Grant",
+  154021363424: "Robert De Vries",
+  154003138850: "Rodney Sassi",
+  154003789077: "Shanice Thompson",
+  154008582398: "Soula Doufas",
+  154005048040: "Trevor Len",
+  154025450067: "Vitaliy Gorbenko",
+};
+
 const TicketDetailModal = ({ ticketId, onClose }) => {
   const [ticket, setTicket] = useState(null);
   const [requester, setRequester] = useState(null);
@@ -17,7 +47,10 @@ const TicketDetailModal = ({ ticketId, onClose }) => {
       try {
         const response = await getTicket(ticketId);
         // Response includes ticket, requester, and conversations
-        setTicket(response.ticket || response.data || response);
+        const ticketData = response.ticket || response.data || response;
+        console.log('Ticket data:', ticketData);
+        console.log('Assigned to field:', ticketData.assigned_to);
+        setTicket(ticketData);
         setRequester(response.requester || null);
       } catch (err) {
         console.error('Error fetching ticket:', err);
@@ -107,12 +140,22 @@ const TicketDetailModal = ({ ticketId, onClose }) => {
               </span>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-4">
+            {ticket && (ticket.assigned_to || ticket.responder_id) && (
+              <div className="flex items-center space-x-2 text-white">
+                <User className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  {ticket.assigned_to || AGENT_MAP[ticket.responder_id] || `Agent ${ticket.responder_id}`}
+                </span>
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}

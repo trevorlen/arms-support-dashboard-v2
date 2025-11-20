@@ -9,6 +9,7 @@ import {
   AreaChart,
 } from 'recharts';
 import { parseISO, getHours } from 'date-fns';
+import PlatformLogo from './PlatformLogo';
 
 const HourOfDayDashboard = ({ tickets, loading }) => {
   const [selectedPlatform, setSelectedPlatform] = useState('all');
@@ -99,19 +100,19 @@ const HourOfDayDashboard = ({ tickets, loading }) => {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            All Platforms ({tickets?.data?.length || 0})
+            All Platforms
           </button>
           {platforms.map((platform, index) => (
             <button
               key={index}
               onClick={() => setSelectedPlatform(platform)}
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
                 selectedPlatform === platform
                   ? 'bg-primary-600 text-white shadow-md'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {platform} ({platformTotals[platform]})
+              <PlatformLogo platform={platform} size="small" />
             </button>
           ))}
         </div>
@@ -122,7 +123,9 @@ const HourOfDayDashboard = ({ tickets, loading }) => {
           <span className="mr-2">🕐</span>
           Tickets by Hour of Day
           {selectedPlatform !== 'all' && (
-            <span className="ml-2 text-lg text-primary-600">- {selectedPlatform}</span>
+            <span className="ml-2 flex items-center gap-2">
+              - <PlatformLogo platform={selectedPlatform} size="medium" />
+            </span>
           )}
         </h2>
 

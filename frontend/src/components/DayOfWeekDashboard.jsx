@@ -1,18 +1,15 @@
 import React, { useState } from 'react';
 import {
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
-  Cell,
-  LineChart,
-  Line,
+  Area,
+  AreaChart,
 } from 'recharts';
 import { parseISO, getDay, format } from 'date-fns';
+import PlatformLogo from './PlatformLogo';
 
 // Blue, purple, and grey color scheme
 const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280'];
@@ -84,19 +81,19 @@ const DayOfWeekDashboard = ({ tickets, loading }) => {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            All Platforms ({tickets?.data?.length || 0})
+            All Platforms
           </button>
           {platforms.map((platform, index) => (
             <button
               key={index}
               onClick={() => setSelectedPlatform(platform)}
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
                 selectedPlatform === platform
                   ? 'bg-primary-600 text-white shadow-md'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {platform} ({platformTotals[platform]})
+              <PlatformLogo platform={platform} size="small" />
             </button>
           ))}
         </div>
@@ -107,7 +104,9 @@ const DayOfWeekDashboard = ({ tickets, loading }) => {
           <span className="mr-2">📅</span>
           Tickets by Day of Week
           {selectedPlatform !== 'all' && (
-            <span className="ml-2 text-lg text-primary-600">- {selectedPlatform}</span>
+            <span className="ml-2 flex items-center gap-2">
+              - <PlatformLogo platform={selectedPlatform} size="medium" />
+            </span>
           )}
         </h2>
 
@@ -134,11 +133,11 @@ const DayOfWeekDashboard = ({ tickets, loading }) => {
               </div>
             </div>
 
-            {/* Bar Chart */}
+            {/* Area Chart */}
             <div className="mb-8">
               <h3 className="text-lg font-semibold text-gray-700 mb-4">Weekly Distribution</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={dayData}>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={dayData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="day" />
                   <YAxis />
@@ -158,13 +157,14 @@ const DayOfWeekDashboard = ({ tickets, loading }) => {
                       return null;
                     }}
                   />
-                  <Legend />
-                  <Bar dataKey="count" name="Tickets" radius={[8, 8, 0, 0]}>
-                    {dayData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
+                  <Area
+                    type="monotone"
+                    dataKey="count"
+                    stroke="#667eea"
+                    fill="#667eea"
+                    fillOpacity={0.6}
+                  />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
 

@@ -123,12 +123,20 @@ function App() {
       // Calculate date range
       const { start_date, end_date } = calculateDateRange(dateRange);
 
+      // Calculate extended start date to include previous period for trend comparison
+      // We need 2x the duration to get both current and previous periods
+      const currentStart = new Date(start_date);
+      const currentEnd = new Date(end_date);
+      const duration = currentEnd - currentStart;
+      const extendedStart = new Date(currentStart.getTime() - duration);
+
       // ARMS Support Product ID
       const ARMS_PRODUCT_ID = '154000020827';
 
       // Fetch tickets, summary, and devops items in parallel (filtered by ARMS Support Product)
+      // Use extended start date for tickets to include previous period data for trends
       const [ticketsResponse, summaryResponse, devopsResponse] = await Promise.all([
-        getTickets({ start_date, limit: 10000, product_id: ARMS_PRODUCT_ID, include_2024: include2024 }),
+        getTickets({ start_date: extendedStart.toISOString(), limit: 10000, product_id: ARMS_PRODUCT_ID, include_2024: include2024 }),
         getSummary({ start_date, product_id: ARMS_PRODUCT_ID, include_2024: include2024 }),
         getDevOpsItems(),
       ]);
@@ -151,12 +159,12 @@ function App() {
   }, [dateRange, include2024, customStartDate, customEndDate]);
 
   const tabs = [
-    { id: 'platform', name: 'By Platform', icon: BarChart3 },
+    { id: 'platform', name: 'Overview', icon: BarChart3 },
     { id: 'league', name: 'By League', icon: Trophy },
     { id: 'hour', name: 'By Hour', icon: Clock },
     { id: 'dayofweek', name: 'By Day', icon: CalendarDays },
     { id: 'types', name: 'By Type', icon: FileText },
-    { id: 'priority', name: 'Priority & Issues', icon: Target },
+    { id: 'priority', name: 'Issues', icon: Target },
     { id: 'devops', name: 'DevOps', icon: BarChart3 },
     ...(ENABLE_CHANGE_REQUESTS ? [{ id: 'changerequest', name: 'Change Requests', icon: FileText }] : []),
     { id: 'staff', name: 'Staff Performance', icon: Users },
@@ -290,6 +298,49 @@ function App() {
             )}
           </div>
         </div>
+
+        {/* Tab Navigation */}
+        <div className="bg-gradient-to-r from-gray-100 via-blue-100 to-gray-100 rounded-lg shadow mt-4">
+          <div className="border-b border-gray-200">
+            {/* Desktop Navigation - horizontal scrolling on small screens */}
+            <nav className="md:flex hidden -mb-px overflow-x-auto">
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center space-x-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
+                      activeTab === tab.id
+                        ? 'border-primary-500 text-primary-600 bg-white'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-white/50'
+                    }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span>{tab.name}</span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Mobile Navigation - dropdown select */}
+            <div className="md:hidden p-4">
+              <label htmlFor="tab-select" className="sr-only">Select tab</label>
+              <select
+                id="tab-select"
+                value={activeTab}
+                onChange={(e) => setActiveTab(e.target.value)}
+                className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-base"
+              >
+                {tabs.map((tab) => (
+                  <option key={tab.id} value={tab.id}>
+                    {tab.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -308,59 +359,18 @@ function App() {
           <LoadingIndicator dateRange={dateRange} />
         ) : (
           <>
-            {/* KPI Cards */}
-            <KPICards stats={summary} loading={loading} />
-
-            {/* Tab Navigation */}
-            <div className="bg-white rounded-lg shadow mb-6">
-              <div className="border-b border-gray-200">
-                {/* Desktop Navigation - horizontal scrolling on small screens */}
-                <nav className="md:flex hidden -mb-px overflow-x-auto">
-                  {tabs.map((tab) => {
-                    const Icon = tab.icon;
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center space-x-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                          activeTab === tab.id
-                            ? 'border-primary-500 text-primary-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                        }`}
-                      >
-                        <Icon className="w-5 h-5" />
-                        <span>{tab.name}</span>
-                      </button>
-                    );
-                  })}
-                </nav>
-
-                {/* Mobile Navigation - dropdown select */}
-                <div className="md:hidden p-4">
-                  <label htmlFor="tab-select" className="sr-only">Select tab</label>
-                  <select
-                    id="tab-select"
-                    value={activeTab}
-                    onChange={(e) => setActiveTab(e.target.value)}
-                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-base"
-                  >
-                    {tabs.map((tab) => (
-                      <option key={tab.id} value={tab.id}>
-                        {tab.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
             {/* Dashboard Content */}
-            {activeTab === 'platform' && <PlatformDashboard summary={summary} tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
+            {activeTab === 'platform' && (
+              <>
+                <KPICards stats={summary} tickets={tickets} loading={loading} dateRange={calculateDateRange(dateRange)} />
+                <PlatformDashboard summary={summary} tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />
+              </>
+            )}
             {activeTab === 'league' && <LeagueDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'hour' && <HourOfDayDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'dayofweek' && <DayOfWeekDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
             {activeTab === 'types' && <TicketTypesDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} />}
-            {activeTab === 'priority' && <PriorityIssueTypeDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} />}
+            {activeTab === 'priority' && <PriorityIssueTypeDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} dateRange={calculateDateRange(dateRange)} />}
             {activeTab === 'devops' && <DevOpsDashboard devopsTickets={devopsTickets} loading={loading} />}
             {activeTab === 'changerequest' && ENABLE_CHANGE_REQUESTS && <ChangeRequestsDashboard loading={loading} />}
             {activeTab === 'staff' && <StaffPerformanceDashboard tickets={tickets} loading={loading} />}
