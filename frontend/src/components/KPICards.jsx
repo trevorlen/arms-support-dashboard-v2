@@ -128,7 +128,9 @@ const KPICards = ({ stats, tickets, loading, dateRange }) => {
   // Use calculated metrics for display (ensures proper date filtering)
   const ticketsCreated = currentMetrics.created || 0;
   const ticketsResolved = currentMetrics.resolved || 0;
-  const medianResponseTime = currentMetrics.medianResponseTime || 0;
+
+  // Use median response time from summary stats if available, otherwise use calculated
+  const medianResponseTime = stats?.response_time?.median || currentMetrics.medianResponseTime || 0;
 
   // Calculate priority breakdown from tickets data (filtered by date range and product)
   const priorityBreakdown = useMemo(() => {

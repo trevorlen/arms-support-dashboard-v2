@@ -9,9 +9,9 @@ const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8'
 const CustomXAxisTick = ({ x, y, payload }) => {
   return (
     <g transform={`translate(${x},${y})`}>
-      <foreignObject x={-24} y={0} width={48} height={60}>
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <PlatformLogo platform={payload.value} size={{ height: '48px', width: 'auto' }} />
+      <foreignObject x={-30} y={0} width={60} height={60}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+          <PlatformLogo platform={payload.value} size={{ height: '40px', width: 'auto' }} />
         </div>
       </foreignObject>
     </g>

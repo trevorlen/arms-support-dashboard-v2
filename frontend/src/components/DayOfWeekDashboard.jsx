@@ -94,7 +94,7 @@ const DayOfWeekDashboard = ({ tickets, loading, dateRange }) => {
       {/* Platform Filter */}
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-sm font-medium text-gray-700 mb-3">Filter by Platform</h3>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 justify-center">
           <button
             onClick={() => setSelectedPlatform('all')}
             className={`px-4 py-2 rounded-lg font-medium transition-all ${

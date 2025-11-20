@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ExternalLink, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
-import DevOpsLink from './DevOpsLink';
+import { ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, Info } from 'lucide-react';
 
 const COLORS = ['#dc3545', '#fd7e14', '#ffc107', '#28a745'];
 const ISSUE_COLORS = ['#dc3545', '#17a2b8', '#6c757d'];
@@ -9,6 +8,8 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
   const [sortColumn, setSortColumn] = useState('status');
   const [sortDirection, setSortDirection] = useState('asc');
   const [issueFilter, setIssueFilter] = useState('system'); // 'system' or 'user'
+  const [statusFilter, setStatusFilter] = useState('open'); // 'open' or 'all'
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -24,6 +25,9 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
     const colors = {
       Open: 'bg-blue-100 text-blue-800',
       'In Progress': 'bg-purple-100 text-purple-800',
+      'In Backlog': 'bg-indigo-100 text-indigo-800',
+      'Review Response': 'bg-cyan-100 text-cyan-800',
+      Pending: 'bg-yellow-100 text-yellow-800',
       'Awaiting Information': 'bg-orange-100 text-orange-800',
       'Waiting on Third Party': 'bg-amber-100 text-amber-800',
       Resolved: 'bg-green-100 text-green-800',
@@ -89,12 +93,76 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
 
   const totalPriority = priorityData.reduce((sum, item) => sum + item.count, 0);
 
-  // Filter tickets based on issue type toggle
-  const filteredTickets = useMemo(() => {
-    const dateRangeStart = dateRange?.start_date ? new Date(dateRange.start_date) : null;
+  // Calculate static System Issues and User Issues counts
+  // Include ALL unresolved issues + resolved issues created within the date range (matching table logic)
+  const dateRangeStart = dateRange?.start_date ? new Date(dateRange.start_date) : null;
+  const dateRangeEnd = dateRange?.end_date ? new Date(dateRange.end_date) : null;
 
+  const systemIssuesCount = useMemo(() => {
     return tickets.data.filter(ticket => {
-      // Check issue_type at root level or cf_issue_type nested under custom_fields
+      const issueType = ticket.issue_type || ticket.custom_fields?.cf_issue_type || '';
+      const status = ticket.status_name || ticket.status;
+      const createdDate = ticket.created_at ? new Date(ticket.created_at) : null;
+
+      // Must be System Issue type
+      if (issueType !== 'System Issue') return false;
+
+      // Include ALL unresolved issues (regardless of date)
+      if (isUnresolved(status)) {
+        return true;
+      }
+
+      // Include resolved/closed issues created within the selected date range
+      if (dateRangeStart && createdDate >= dateRangeStart) {
+        return true;
+      }
+
+      return false;
+    }).length;
+  }, [tickets.data, dateRangeStart, dateRangeEnd]);
+
+  const userIssuesCount = useMemo(() => {
+    return tickets.data.filter(ticket => {
+      const issueType = ticket.issue_type || ticket.custom_fields?.cf_issue_type || '';
+      const status = ticket.status_name || ticket.status;
+      const createdDate = ticket.created_at ? new Date(ticket.created_at) : null;
+
+      // Must be User Issue type
+      if (issueType !== 'User Issue') return false;
+
+      // Include ALL unresolved issues (regardless of date)
+      if (isUnresolved(status)) {
+        return true;
+      }
+
+      // Include resolved/closed issues created within the selected date range
+      if (dateRangeStart && createdDate >= dateRangeStart) {
+        return true;
+      }
+
+      return false;
+    }).length;
+  }, [tickets.data, dateRangeStart, dateRangeEnd]);
+
+  // Dev assistance needed - count tickets with cf_dev_assistance_needed === "Yes" within date range
+  const devAssistanceNeeded = tickets.data.filter(ticket => {
+    const createdDate = ticket.created_at ? new Date(ticket.created_at) : null;
+
+    // Check if dev assistance needed field is "Yes"
+    const devAssist = ticket.cf_dev_assistance_needed || ticket.custom_fields?.cf_dev_assistance_needed;
+    if (devAssist !== 'Yes' && devAssist !== true) return false;
+
+    // Only count tickets created within the date range
+    if (dateRangeStart && dateRangeEnd && createdDate) {
+      return createdDate >= dateRangeStart && createdDate <= dateRangeEnd;
+    }
+
+    return false;
+  }).length;
+
+  // Filter tickets based on issue type toggle and status filter
+  const filteredTickets = useMemo(() => {
+    return tickets.data.filter(ticket => {
       const issueType = ticket.issue_type || ticket.custom_fields?.cf_issue_type || '';
       const status = ticket.status_name || ticket.status;
       const createdDate = new Date(ticket.created_at);
@@ -102,6 +170,11 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
       // Filter by selected issue type
       const targetIssueType = issueFilter === 'system' ? 'System Issue' : 'User Issue';
       if (issueType !== targetIssueType) {
+        return false;
+      }
+
+      // Filter by status (open/all)
+      if (statusFilter === 'open' && !isUnresolved(status)) {
         return false;
       }
 
@@ -117,20 +190,7 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
 
       return false;
     });
-  }, [tickets.data, dateRange, issueFilter]);
-
-  // Issue type breakdown (System Issue vs User Issue) - count all tickets for these metrics
-  const issueTypeCounts = {};
-
-  tickets.data.forEach((ticket) => {
-    const issueType = ticket.issue_type || ticket.cf_issue_type || 'Other';
-    issueTypeCounts[issueType] = (issueTypeCounts[issueType] || 0) + 1;
-  });
-
-  // Dev assistance needed
-  const devAssistanceNeeded = tickets.data.filter(
-    (t) => t.dev_assistance_needed === true || t.cf_dev_assistance_needed === true
-  ).length;
+  }, [tickets.data, dateRange, issueFilter, statusFilter]);
 
   // Sort filtered tickets - ALWAYS put unresolved tickets first
   const sortedTickets = useMemo(() => {
@@ -159,9 +219,9 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
           aValue = (a.subject || a.title || '').toLowerCase();
           bValue = (b.subject || b.title || '').toLowerCase();
           break;
-        case 'league':
-          aValue = (a.league || 'Unknown').toLowerCase();
-          bValue = (b.league || 'Unknown').toLowerCase();
+        case 'platform':
+          aValue = (a.platform || 'Unknown').toLowerCase();
+          bValue = (b.platform || 'Unknown').toLowerCase();
           break;
         case 'status':
           aValue = aStatus.toLowerCase();
@@ -198,65 +258,96 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
           System vs User Issues
         </h2>
 
-        {Object.keys(issueTypeCounts).length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            No issue type data available
-          </div>
-        ) : (
-          <>
-            {/* Issue Type Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-6">
-                <h3 className="text-sm font-medium text-red-800 mb-2">System Issues (Unresolved)</h3>
-                <p className="text-3xl font-bold text-red-900">
-                  {filteredTickets.length}
-                </p>
-              </div>
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6">
-                <h3 className="text-sm font-medium text-blue-800 mb-2">User Issues (All)</h3>
-                <p className="text-3xl font-bold text-blue-900">
-                  {issueTypeCounts['User Issue'] || 0}
-                </p>
-              </div>
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6">
-                <h3 className="text-sm font-medium text-green-800 mb-2">Dev Assistance Needed</h3>
-                <p className="text-3xl font-bold text-green-900">{devAssistanceNeeded}</p>
-              </div>
+        <>
+          {/* Issue Type Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-6">
+              <h3 className="text-sm font-medium text-red-800 mb-2">System Issues</h3>
+              <p className="text-3xl font-bold text-red-900">
+                {systemIssuesCount}
+              </p>
             </div>
-          </>
-        )}
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6">
+              <h3 className="text-sm font-medium text-blue-800 mb-2">User Issues</h3>
+              <p className="text-3xl font-bold text-blue-900">
+                {userIssuesCount}
+              </p>
+            </div>
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 relative">
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="text-sm font-medium text-green-800">Dev Assistance Needed</h3>
+                <div className="group relative">
+                  <Info className="w-4 h-4 text-green-600 cursor-help" />
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none w-64 z-10">
+                    This value is reflective of all ticket types regardless of ticket type
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
+                      <div className="border-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p className="text-3xl font-bold text-green-900">{devAssistanceNeeded}</p>
+            </div>
+          </div>
+        </>
       </div>
 
       {/* Issues Table with Toggle */}
       {sortedTickets.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 flex items-center">
-              <span className="mr-2">📋</span>
-              {issueFilter === 'system' ? 'System Issues' : 'User Issues'} & New Tickets ({sortedTickets.length})
-            </h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                <span className="mr-2">📋</span>
+                Issues
+              </h2>
 
-            {/* Issue Type Toggle */}
+              {/* Issue Type Toggle */}
+              <div className="flex items-center bg-gray-200 rounded-lg p-1 shadow-inner">
+                <button
+                  onClick={() => setIssueFilter('system')}
+                  className={`px-4 py-2 rounded-md text-sm font-semibold transition-all ${
+                    issueFilter === 'system'
+                      ? 'bg-primary-600 text-white shadow-md'
+                      : 'text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  System
+                </button>
+                <button
+                  onClick={() => setIssueFilter('user')}
+                  className={`px-4 py-2 rounded-md text-sm font-semibold transition-all ${
+                    issueFilter === 'user'
+                      ? 'bg-primary-600 text-white shadow-md'
+                      : 'text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  User
+                </button>
+              </div>
+            </div>
+
+            {/* Open/All Toggle */}
             <div className="flex items-center bg-gray-200 rounded-lg p-1 shadow-inner">
               <button
-                onClick={() => setIssueFilter('system')}
+                onClick={() => setStatusFilter('open')}
                 className={`px-4 py-2 rounded-md text-sm font-semibold transition-all ${
-                  issueFilter === 'system'
+                  statusFilter === 'open'
                     ? 'bg-primary-600 text-white shadow-md'
                     : 'text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                System Issues
+                Open
               </button>
               <button
-                onClick={() => setIssueFilter('user')}
+                onClick={() => setStatusFilter('all')}
                 className={`px-4 py-2 rounded-md text-sm font-semibold transition-all ${
-                  issueFilter === 'user'
+                  statusFilter === 'all'
                     ? 'bg-primary-600 text-white shadow-md'
                     : 'text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                User Issues
+                All
               </button>
             </div>
           </div>
@@ -281,10 +372,10 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
                   </th>
                   <th
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                    onClick={() => handleSort('league')}
+                    onClick={() => handleSort('platform')}
                   >
-                    League
-                    <SortIcon column="league" />
+                    Platform
+                    <SortIcon column="platform" />
                   </th>
                   <th
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
@@ -299,9 +390,6 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
                   >
                     Created
                     <SortIcon column="created" />
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    DevOps Link
                   </th>
                 </tr>
               </thead>
@@ -339,7 +427,7 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {ticket.league || 'Unknown'}
+                        {ticket.platform || 'Unknown'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(ticket.status_name || ticket.status)}`}>
@@ -348,9 +436,6 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {new Date(ticket.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <DevOpsLink ticket={ticket} />
                       </td>
                     </tr>
                   );

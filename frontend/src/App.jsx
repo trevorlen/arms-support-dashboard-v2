@@ -81,6 +81,15 @@ function App() {
         start_date: startDate.toISOString(),
         end_date: endDate.toISOString()
       };
+    } else if (range === 'this_year') {
+      // Get Jan 1 of current year to now
+      startDate = new Date(now.getFullYear(), 0, 1); // Jan 1st
+      startDate.setHours(0, 0, 0, 0);
+
+      return {
+        start_date: startDate.toISOString(),
+        end_date: now.toISOString()
+      };
     } else {
       // Regular days back calculation
       const daysBack = Number(range);
@@ -243,6 +252,7 @@ function App() {
                   <option value={14}>Last 14 days</option>
                   <option value={30}>Last 30 days</option>
                   <option value={90}>Last 90 days</option>
+                  <option value="this_year">This Year</option>
                   <option value="custom">Custom</option>
                 </select>
                 {dateRange === 'custom' && (
@@ -274,7 +284,7 @@ function App() {
                 )}
               </div>
 
-              {/* Include 2024 Tickets Checkbox */}
+              {/* Include PY Tickets Checkbox */}
               <label className="flex items-center space-x-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -282,7 +292,7 @@ function App() {
                   onChange={(e) => setInclude2024(e.target.checked)}
                   className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
                 />
-                <span className="text-sm font-medium text-gray-700">Include 2024 Tickets</span>
+                <span className="text-sm font-medium text-gray-700">Include PY Tickets</span>
               </label>
               {include2024 && (
                 <span className="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded">
@@ -303,7 +313,7 @@ function App() {
         <div className="bg-gradient-to-r from-gray-100 via-blue-100 to-gray-100 rounded-lg shadow mt-4">
           <div className="border-b border-gray-200">
             {/* Desktop Navigation - horizontal scrolling on small screens */}
-            <nav className="md:flex hidden -mb-px overflow-x-auto">
+            <nav className="md:flex hidden -mb-px overflow-x-auto justify-center">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (

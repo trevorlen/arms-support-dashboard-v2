@@ -225,6 +225,28 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick, dateRange }) => {
     setCurrentPage(1);
   }, [searchQuery, selectedPlatform, selectedLeague, statusFilter]);
 
+  // Auto-select league if platform has only one league (ECHL, CFL, Multisport, etc.)
+  useEffect(() => {
+    if (!selectedPlatform) {
+      setSelectedLeague(null);
+      return;
+    }
+
+    // Get leagues for the selected platform
+    const leaguesForPlatform = platformLeagueCounts[selectedPlatform];
+    if (leaguesForPlatform) {
+      const leaguesList = Object.keys(leaguesForPlatform);
+
+      // If only one league, auto-select it
+      if (leaguesList.length === 1) {
+        setSelectedLeague(leaguesList[0]);
+      } else {
+        // Reset selection when switching to multi-league platform
+        setSelectedLeague(null);
+      }
+    }
+  }, [selectedPlatform, platformLeagueCounts]);
+
   // Filter tickets by selected platform, league, and product_id
   const platformFilteredTickets = useMemo(() => {
     if (!selectedPlatform || !tickets?.data) return [];
@@ -346,8 +368,8 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick, dateRange }) => {
 
   const total = leagueData.reduce((sum, item) => sum + item.count, 0);
 
-  // Check if there's only one unique league in the filtered results
-  const hasOnlyOneLeague = leagueData.length === 1;
+  // Check if there's only one unique league in the filtered results (no longer used)
+  // const hasOnlyOneLeague = leagueData.length === 1;
 
   // Group tickets by league → team for drill-down view
   const leagueTeamData = useMemo(() => {
@@ -401,7 +423,7 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick, dateRange }) => {
       {/* Platform Filter */}
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-sm font-medium text-gray-700 mb-3">Filter by Platform</h3>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 justify-center">
           {platforms.map((platform, index) => (
             <button
               key={index}
@@ -585,87 +607,6 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick, dateRange }) => {
                             </tr>
                           );
                         })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <PaginationControls />
-                </div>
-              )}
-            </>
-          ) : hasOnlyOneLeague ? (
-            <>
-              {/* Show only Recent Tickets when there's only one league */}
-              {onTicketClick && filteredTickets && filteredTickets.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-700 mb-4">
-                    {leagueData[0].name} - Recent Tickets ({filteredTickets.length})
-                  </h3>
-                  <SearchAndPaginationControls />
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                            onClick={() => handleSort('ticket')}
-                          >
-                            Ticket #
-                            <SortIcon column="ticket" />
-                          </th>
-                          <th
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                            onClick={() => handleSort('subject')}
-                          >
-                            Subject
-                            <SortIcon column="subject" />
-                          </th>
-                          <th
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                            onClick={() => handleSort('status')}
-                          >
-                            Status
-                            <SortIcon column="status" />
-                          </th>
-                          <th
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                            onClick={() => handleSort('created')}
-                          >
-                            Created
-                            <SortIcon column="created" />
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            DevOps Link
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {paginatedTickets.map((ticket) => (
-                          <tr
-                            key={ticket.id}
-                            className="hover:bg-gray-50 cursor-pointer transition-colors"
-                            onClick={() => onTicketClick(ticket.id)}
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary-600">
-                              #{ticket.id}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-900">
-                              <div className="max-w-md truncate">
-                                {ticket.title || ticket.subject}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(ticket.status_name || ticket.status)}`}>
-                                {ticket.status_name || ticket.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                              {new Date(ticket.created_at).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              <DevOpsLink ticket={ticket} />
-                            </td>
-                          </tr>
-                        ))}
                       </tbody>
                     </table>
                   </div>
