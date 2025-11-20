@@ -101,12 +101,25 @@ const PriorityIssueTypeDashboard = ({ tickets, summary, loading, onTicketClick, 
   const systemIssuesCount = useMemo(() => {
     return tickets.data.filter(ticket => {
       const issueType = ticket.issue_type || ticket.custom_fields?.cf_issue_type || '';
+      const status = ticket.status_name || ticket.status || '';
       const createdDate = ticket.created_at ? new Date(ticket.created_at) : null;
 
       // Must be System Issue type
       if (issueType !== 'System Issue') return false;
 
-      // Only count tickets created within the date range (regardless of status)
+      // Match the table logic: count ALL unresolved tickets created on or before end date
+      // PLUS resolved tickets created within the date range
+      if (isUnresolved(status)) {
+        if (dateRangeEnd && createdDate <= dateRangeEnd) {
+          return true;
+        }
+        if (!dateRangeEnd) {
+          return true;
+        }
+        return false;
+      }
+
+      // For resolved tickets, must be within date range
       if (dateRangeStart && dateRangeEnd && createdDate) {
         return createdDate >= dateRangeStart && createdDate <= dateRangeEnd;
       }
