@@ -15,7 +15,7 @@ import PlatformLogo from './PlatformLogo';
 const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280'];
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-const DayOfWeekDashboard = ({ tickets, loading }) => {
+const DayOfWeekDashboard = ({ tickets, loading, dateRange }) => {
   const [selectedPlatform, setSelectedPlatform] = useState('all');
   if (loading) {
     return (
@@ -26,6 +26,10 @@ const DayOfWeekDashboard = ({ tickets, loading }) => {
       </div>
     );
   }
+
+  // Filter tickets by date range
+  const startDate = dateRange ? new Date(dateRange.start_date) : null;
+  const endDate = dateRange ? new Date(dateRange.end_date) : null;
 
   // Get unique platforms
   const platforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])].sort();
@@ -48,6 +52,13 @@ const DayOfWeekDashboard = ({ tickets, loading }) => {
     if (ticket.created_at) {
       try {
         const date = parseISO(ticket.created_at);
+
+        // Filter by date range
+        if (startDate && endDate) {
+          const ticketDate = new Date(ticket.created_at);
+          if (ticketDate < startDate || ticketDate > endDate) return;
+        }
+
         const dayOfWeek = getDay(date);
         dayCounts[dayOfWeek]++;
       } catch (error) {

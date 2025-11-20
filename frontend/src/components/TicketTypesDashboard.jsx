@@ -16,7 +16,7 @@ import PlatformLogo from './PlatformLogo';
 // Blue, purple, and grey color scheme
 const COLORS = ['#3B82F6', '#8B5CF6', '#6366F1', '#60A5FA', '#A78BFA', '#818CF8', '#6B7280', '#9CA3AF'];
 
-const TicketTypesDashboard = ({ tickets, summary, loading }) => {
+const TicketTypesDashboard = ({ tickets, summary, loading, dateRange }) => {
   const [selectedTicketType, setSelectedTicketType] = useState(null);
   const [selectedIssueType, setSelectedIssueType] = useState(null);
   const [expandedTypes, setExpandedTypes] = useState({});
@@ -31,6 +31,10 @@ const TicketTypesDashboard = ({ tickets, summary, loading }) => {
       </div>
     );
   }
+
+  // Filter tickets by date range
+  const startDate = dateRange ? new Date(dateRange.start_date) : null;
+  const endDate = dateRange ? new Date(dateRange.end_date) : null;
 
   // Get unique platforms
   const platforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])].sort();
@@ -48,6 +52,12 @@ const TicketTypesDashboard = ({ tickets, summary, loading }) => {
   // Build two-level structure: custom_ticket_type -> issue_type
   const hierarchy = {};
   filteredTickets.forEach((ticket) => {
+    // Filter by date range
+    if (startDate && endDate) {
+      const ticketDate = new Date(ticket.created_at);
+      if (ticketDate < startDate || ticketDate > endDate) return;
+    }
+
     const ticketType = ticket.custom_ticket_type || 'Unknown';
     const issueType = ticket.issue_type || 'Unknown';
 

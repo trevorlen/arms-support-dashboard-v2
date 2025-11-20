@@ -11,7 +11,7 @@ import {
 import { parseISO, getHours } from 'date-fns';
 import PlatformLogo from './PlatformLogo';
 
-const HourOfDayDashboard = ({ tickets, loading }) => {
+const HourOfDayDashboard = ({ tickets, loading, dateRange }) => {
   const [selectedPlatform, setSelectedPlatform] = useState('all');
   if (loading) {
     return (
@@ -23,6 +23,10 @@ const HourOfDayDashboard = ({ tickets, loading }) => {
     );
   }
 
+  // Filter tickets by date range
+  const startDate = dateRange ? new Date(dateRange.start_date) : null;
+  const endDate = dateRange ? new Date(dateRange.end_date) : null;
+
   // Get unique platforms
   const platforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])].sort();
   const platformTotals = {};
@@ -31,10 +35,18 @@ const HourOfDayDashboard = ({ tickets, loading }) => {
     platformTotals[platform] = (platformTotals[platform] || 0) + 1;
   });
 
-  // Filter tickets by selected platform
-  const filteredTickets = selectedPlatform === 'all'
+  // Filter tickets by selected platform and date range
+  const filteredTickets = (selectedPlatform === 'all'
     ? tickets?.data || []
-    : tickets?.data?.filter(t => (t.platform || 'Unknown') === selectedPlatform) || [];
+    : tickets?.data?.filter(t => (t.platform || 'Unknown') === selectedPlatform) || [])
+    .filter((ticket) => {
+      // Filter by date range
+      if (startDate && endDate && ticket.created_at) {
+        const ticketDate = new Date(ticket.created_at);
+        if (ticketDate < startDate || ticketDate > endDate) return false;
+      }
+      return true;
+    });
 
   // Group tickets by hour of day
   const hourCounts = Array(24)

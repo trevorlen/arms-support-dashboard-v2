@@ -21,7 +21,7 @@ const CustomYAxisTick = ({ x, y, payload }) => {
   );
 };
 
-const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
+const LeagueDashboard = ({ tickets, loading, onTicketClick, dateRange }) => {
   const [selectedPlatform, setSelectedPlatform] = useState(null);
   const [selectedLeague, setSelectedLeague] = useState(null); // For league drill-down
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,6 +33,10 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
 
   // ARMS Support Product ID for filtering
   const ARMS_PRODUCT_ID = '154000020827';
+
+  // Filter tickets by date range
+  const startDate = dateRange ? new Date(dateRange.start_date) : null;
+  const endDate = dateRange ? new Date(dateRange.end_date) : null;
 
   const getStatusColor = (status) => {
     const colors = {
@@ -197,6 +201,12 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
     const matchesProduct = !ticket.product_id || String(ticket.product_id) === ARMS_PRODUCT_ID;
     if (!matchesProduct) return;
 
+    // Filter by date range
+    if (startDate && endDate) {
+      const ticketDate = new Date(ticket.created_at);
+      if (ticketDate < startDate || ticketDate > endDate) return;
+    }
+
     const platform = ticket.platform || 'Unknown';
     const league = ticket.league || 'Unknown';
 
@@ -226,12 +236,18 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick }) => {
       // Filter by product_id to ensure only ARMS Support tickets
       const matchesProduct = !t.product_id || String(t.product_id) === ARMS_PRODUCT_ID;
 
+      // Filter by date range
+      if (startDate && endDate) {
+        const ticketDate = new Date(t.created_at);
+        if (ticketDate < startDate || ticketDate > endDate) return false;
+      }
+
       // Filter by selected league if one is selected
       const matchesLeague = !selectedLeague || (t.league || 'Unknown') === selectedLeague;
 
       return matchesPlatform && matchesProduct && matchesLeague;
     });
-  }, [selectedPlatform, selectedLeague, tickets, ARMS_PRODUCT_ID]);
+  }, [selectedPlatform, selectedLeague, tickets, ARMS_PRODUCT_ID, startDate, endDate]);
 
   // Search and status filtered tickets
   const searchFilteredTickets = useMemo(() => {

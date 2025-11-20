@@ -18,7 +18,7 @@ const CustomXAxisTick = ({ x, y, payload }) => {
   );
 };
 
-const PlatformDashboard = ({ summary, tickets, loading }) => {
+const PlatformDashboard = ({ summary, tickets, loading, dateRange }) => {
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
@@ -32,12 +32,22 @@ const PlatformDashboard = ({ summary, tickets, loading }) => {
   // ARMS Support Product ID for filtering
   const ARMS_PRODUCT_ID = '154000020827';
 
-  // Calculate platform counts from tickets (ensures product_id filtering is applied)
+  // Filter tickets by date range
+  const startDate = dateRange ? new Date(dateRange.start_date) : null;
+  const endDate = dateRange ? new Date(dateRange.end_date) : null;
+
+  // Calculate platform counts from tickets (ensures product_id and date filtering is applied)
   const platformCounts = {};
   tickets?.data?.forEach((ticket) => {
     // Filter by product_id to ensure only ARMS Support tickets
     const matchesProduct = !ticket.product_id || String(ticket.product_id) === ARMS_PRODUCT_ID;
     if (!matchesProduct) return;
+
+    // Filter by date range
+    if (startDate && endDate) {
+      const ticketDate = new Date(ticket.created_at);
+      if (ticketDate < startDate || ticketDate > endDate) return;
+    }
 
     const platform = ticket.platform || 'Unknown';
     platformCounts[platform] = (platformCounts[platform] || 0) + 1;
@@ -58,6 +68,13 @@ const PlatformDashboard = ({ summary, tickets, loading }) => {
       // Filter by product_id to ensure only ARMS Support tickets
       const matchesProduct = !ticket.product_id || String(ticket.product_id) === ARMS_PRODUCT_ID;
       const matchesPlatform = (ticket.platform || 'Unknown') === platformName;
+
+      // Filter by date range
+      if (startDate && endDate) {
+        const ticketDate = new Date(ticket.created_at);
+        if (ticketDate < startDate || ticketDate > endDate) return false;
+      }
+
       return matchesProduct && matchesPlatform;
     });
 

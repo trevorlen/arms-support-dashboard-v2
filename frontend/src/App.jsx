@@ -363,17 +363,17 @@ function App() {
             {activeTab === 'platform' && (
               <>
                 <KPICards stats={summary} tickets={tickets} loading={loading} dateRange={calculateDateRange(dateRange)} />
-                <PlatformDashboard summary={summary} tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />
+                <PlatformDashboard summary={summary} tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} dateRange={calculateDateRange(dateRange)} />
               </>
             )}
-            {activeTab === 'league' && <LeagueDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
-            {activeTab === 'hour' && <HourOfDayDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
-            {activeTab === 'dayofweek' && <DayOfWeekDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} />}
-            {activeTab === 'types' && <TicketTypesDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} />}
+            {activeTab === 'league' && <LeagueDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} dateRange={calculateDateRange(dateRange)} />}
+            {activeTab === 'hour' && <HourOfDayDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} dateRange={calculateDateRange(dateRange)} />}
+            {activeTab === 'dayofweek' && <DayOfWeekDashboard tickets={tickets} loading={loading} onTicketClick={setSelectedTicketId} dateRange={calculateDateRange(dateRange)} />}
+            {activeTab === 'types' && <TicketTypesDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} dateRange={calculateDateRange(dateRange)} />}
             {activeTab === 'priority' && <PriorityIssueTypeDashboard tickets={tickets} summary={summary} loading={loading} onTicketClick={setSelectedTicketId} dateRange={calculateDateRange(dateRange)} />}
             {activeTab === 'devops' && <DevOpsDashboard devopsTickets={devopsTickets} loading={loading} />}
             {activeTab === 'changerequest' && ENABLE_CHANGE_REQUESTS && <ChangeRequestsDashboard loading={loading} />}
-            {activeTab === 'staff' && <StaffPerformanceDashboard tickets={tickets} loading={loading} />}
+            {activeTab === 'staff' && <StaffPerformanceDashboard tickets={tickets} loading={loading} dateRange={calculateDateRange(dateRange)} />}
           </>
         )}
       </main>

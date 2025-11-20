@@ -88,7 +88,7 @@ const STATUS_COLORS = {
   'Awaiting Information': '#8B5CF6',
 };
 
-const StaffPerformanceDashboard = ({ tickets, loading }) => {
+const StaffPerformanceDashboard = ({ tickets, loading, dateRange }) => {
   const [selectedPlatform, setSelectedPlatform] = useState('All Platforms'); // Platform filter
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [showEfficiency, setShowEfficiency] = useState(false); // Toggle for efficiency metrics
@@ -182,6 +182,10 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
     );
   }
 
+  // Filter tickets by date range
+  const startDate = dateRange ? new Date(dateRange.start_date) : null;
+  const endDate = dateRange ? new Date(dateRange.end_date) : null;
+
   // Get unique platforms from all tickets (for filter dropdown)
   const allPlatforms = [...new Set(tickets?.data?.map(t => t.platform || 'Unknown') || [])].sort();
   const platformOptions = ['All Platforms', ...allPlatforms];
@@ -195,6 +199,12 @@ const StaffPerformanceDashboard = ({ tickets, loading }) => {
   const ARMS_PRODUCT_ID = '154000020827';
 
   tickets?.data?.forEach((ticket) => {
+    // Filter by date range
+    if (startDate && endDate) {
+      const ticketDate = new Date(ticket.created_at);
+      if (ticketDate < startDate || ticketDate > endDate) return;
+    }
+
     // Filter by product_id to ensure only ARMS Support tickets are counted
     if (ticket.product_id && String(ticket.product_id) !== ARMS_PRODUCT_ID) {
       return;
