@@ -120,15 +120,17 @@ const KPICards = ({ stats, tickets, loading, dateRange }) => {
   const resolvedTickets = stats?.tickets?.resolved || 0;
   const unresolvedTickets = totalTickets - resolvedTickets;
 
-  // Use stats data for display (which already reflects the selected date range from API)
-  // But use calculated metrics for trends
-  const ticketsCreated = stats?.tickets?.created || stats?.tickets?.total || 0;
-  const ticketsResolved = stats?.tickets?.resolved || 0;
-  const medianResponseTime = stats?.response_time?.median || stats?.response_time?.average;
+  // Use calculated metrics for display (ensures proper date filtering)
+  const ticketsCreated = currentMetrics.created || 0;
+  const ticketsResolved = currentMetrics.resolved || 0;
+  const medianResponseTime = currentMetrics.medianResponseTime || 0;
 
-  // Calculate priority breakdown from tickets data
+  // Calculate priority breakdown from tickets data (filtered by date range)
   const priorityBreakdown = useMemo(() => {
-    if (!tickets?.data) return { Urgent: 0, High: 0, Medium: 0, Low: 0, total: 0 };
+    if (!tickets?.data || !dateRange) return { Urgent: 0, High: 0, Medium: 0, Low: 0, total: 0 };
+
+    const currentStart = new Date(dateRange.start_date);
+    const currentEnd = new Date(dateRange.end_date);
 
     const counts = {
       Urgent: 0,
@@ -138,16 +140,22 @@ const KPICards = ({ stats, tickets, loading, dateRange }) => {
     };
 
     tickets.data.forEach((ticket) => {
-      const priority = ticket.priority_name || ticket.priority || 'Unknown';
-      if (counts.hasOwnProperty(priority)) {
-        counts[priority]++;
+      // Filter by date range
+      if (ticket.created_at) {
+        const ticketDate = new Date(ticket.created_at);
+        if (ticketDate >= currentStart && ticketDate <= currentEnd) {
+          const priority = ticket.priority_name || ticket.priority || 'Unknown';
+          if (counts.hasOwnProperty(priority)) {
+            counts[priority]++;
+          }
+        }
       }
     });
 
     const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
 
     return { ...counts, total };
-  }, [tickets]);
+  }, [tickets, dateRange]);
 
   const cards = [
     {
