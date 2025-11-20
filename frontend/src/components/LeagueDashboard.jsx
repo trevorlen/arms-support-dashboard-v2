@@ -473,48 +473,51 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick, dateRange }) => {
                 ← Back to leagues
               </button>
 
-              <h3 className="text-xl font-bold text-gray-900 mb-6">
-                {selectedLeague} - Teams Breakdown
-              </h3>
+              {/* Check if league has teams - if only one team or "Unknown", skip team breakdown */}
+              {leagueTeamData && leagueTeamData.length > 1 && !(leagueTeamData.length === 1 && leagueTeamData[0].name === 'Unknown') ? (
+                <>
+                  <h3 className="text-xl font-bold text-gray-900 mb-6">
+                    {selectedLeague} - Teams Breakdown
+                  </h3>
 
-              {/* Team Breakdown - Bar Chart */}
-              {leagueTeamData && leagueTeamData.length > 0 ? (
-                <div className="mb-8">
-                  <h4 className="text-lg font-semibold text-gray-700 mb-4">Teams ({leagueTeamData.length})</h4>
-                  <ResponsiveContainer width="100%" height={Math.max(300, leagueTeamData.length * 50)}>
-                    <BarChart data={leagueTeamData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={150} />
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            const teamTotal = leagueTeamData.reduce((sum, t) => sum + t.count, 0);
-                            const percentage = ((payload[0].value / teamTotal) * 100).toFixed(1);
-                            return (
-                              <div className="bg-white p-4 border border-gray-200 rounded shadow-lg">
-                                <p className="font-semibold text-gray-900">{payload[0].payload.name}</p>
-                                <p className="text-primary-600">
-                                  {payload[0].value} tickets ({percentage}%)
-                                </p>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                      <Bar dataKey="count" name="Tickets" radius={[0, 8, 8, 0]}>
-                        {leagueTeamData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                  {/* Team Breakdown - Bar Chart */}
+                  <div className="mb-8">
+                    <h4 className="text-lg font-semibold text-gray-700 mb-4">Teams ({leagueTeamData.length})</h4>
+                    <ResponsiveContainer width="100%" height={Math.max(300, leagueTeamData.length * 50)}>
+                      <BarChart data={leagueTeamData} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" />
+                        <YAxis dataKey="name" type="category" width={150} />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const teamTotal = leagueTeamData.reduce((sum, t) => sum + t.count, 0);
+                              const percentage = ((payload[0].value / teamTotal) * 100).toFixed(1);
+                              return (
+                                <div className="bg-white p-4 border border-gray-200 rounded shadow-lg">
+                                  <p className="font-semibold text-gray-900">{payload[0].payload.name}</p>
+                                  <p className="text-primary-600">
+                                    {payload[0].value} tickets ({percentage}%)
+                                  </p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Bar dataKey="count" name="Tickets" radius={[0, 8, 8, 0]}>
+                          {leagueTeamData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </>
               ) : (
-                <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded">
-                  <p className="text-sm text-red-800">No team data available for {selectedLeague}</p>
-                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-6">
+                  {selectedLeague} - Tickets
+                </h3>
               )}
 
               {/* Tickets Table for Selected League */}
