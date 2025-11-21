@@ -1,0 +1,52 @@
+[
+  {
+    "id": "1",
+    "username": "admin",
+    "password_hash": "$2b$12$o2TilogbqBJIyI1kjMu/3eLJsmBK.bKYseCw1BS0YrZteW1dK1eSi",
+    "full_name": "System Administrator",
+    "role": "Admin",
+    "created_at": "2025-01-21T10:00:00Z",
+    "must_change_password": false,
+    "last_login": null
+  },
+  {
+    "id": "2",
+    "username": "tlen@athleterms.com",
+    "password_hash": "$2b$12$k4ZaCQGtRdacgc6PWPAAteweijirMIF8m6wyOmyz0oyR4K2otRRb6",
+    "full_name": "Trevor Len",
+    "role": "Admin",
+    "created_at": "2025-11-21T16:28:01.270133Z",
+    "must_change_password": false,
+    "last_login": "2025-11-21T17:32:12.520669Z"
+  },
+  {
+    "id": "3",
+    "username": "lborgo@athleterms.com",
+    "password_hash": "$2b$12$qkZNHz6l5urPYfDiUFaJzOQnpXpCt39rAUDFc.OaMly0TF0nEYvSG",
+    "full_name": "Lucas Borgo",
+    "role": "Manager",
+    "created_at": "2025-11-21T16:28:53.149182Z",
+    "must_change_password": true,
+    "last_login": null
+  },
+  {
+    "id": "4",
+    "username": "grynbend@athleterms.com",
+    "password_hash": "$2b$12$CnSLbUiiL0wNoIptsRFI9eICwd/nr2yZ5pKQmJR/nyin/yohc38ze",
+    "full_name": "Graham Rynbend",
+    "role": "Viewer",
+    "created_at": "2025-11-21T16:30:37.191917Z",
+    "must_change_password": true,
+    "last_login": null
+  },
+  {
+    "id": "5",
+    "username": "reg.grant@athleterms.com",
+    "password_hash": "$2b$12$heKZgczK.cCV6mYym0scwew/cWCskTrz76jQPEtzbqqPd0TeKU3Ja",
+    "full_name": "Reg Grant",
+    "role": "Manager",
+    "created_at": "2025-11-21T17:31:33.954043Z",
+    "must_change_password": true,
+    "last_login": null
+  }
+]

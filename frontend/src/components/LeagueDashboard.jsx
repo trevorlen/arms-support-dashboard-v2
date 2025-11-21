@@ -473,8 +473,8 @@ const LeagueDashboard = ({ tickets, loading, onTicketClick, dateRange }) => {
                 ← Back to leagues
               </button>
 
-              {/* Check if league has teams - if only one team or "Unknown", skip team breakdown */}
-              {leagueTeamData && leagueTeamData.length > 1 && !(leagueTeamData.length === 1 && leagueTeamData[0].name === 'Unknown') ? (
+              {/* Check if league has teams - if only one team and it's "Unknown", skip team breakdown */}
+              {leagueTeamData && leagueTeamData.length > 0 && !(leagueTeamData.length === 1 && leagueTeamData[0].name === 'Unknown') ? (
                 <>
                   <h3 className="text-xl font-bold text-gray-900 mb-6">
                     {selectedLeague} - Teams Breakdown

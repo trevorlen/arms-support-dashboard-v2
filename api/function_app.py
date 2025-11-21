@@ -8,6 +8,7 @@ from base64 import b64encode
 from datetime import datetime, timezone
 from functools import lru_cache
 from time import time
+from utils import auth
 
 app = func.FunctionApp()
 
@@ -66,6 +67,18 @@ def check_freshdesk_config():
     api_key = os.environ.get('FRESHDESK_API_KEY')
     domain = os.environ.get('FRESHDESK_DOMAIN')
     return bool(api_key) and bool(domain)
+
+def get_auth_user(req: func.HttpRequest):
+    """
+    Extract and verify JWT token from Authorization header.
+    Returns user payload if valid, None otherwise.
+    """
+    auth_header = req.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return None
+
+    token = auth_header.replace('Bearer ', '')
+    return auth.verify_token(token)
 
 def fetch_all_pages_from_freshdesk(base_url, headers, params, max_pages=None):
     """
@@ -185,6 +198,474 @@ def process_ticket(ticket, domain):
 
 # ============================================================================
 # API Endpoints
+# ============================================================================
+
+# ============================================================================
+# Authentication Endpoints
+# ============================================================================
+
+@app.route(route="auth/login", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
+def auth_login(req: func.HttpRequest) -> func.HttpResponse:
+    """Authenticate user and return JWT token"""
+    logging.info('Login attempt')
+
+    try:
+        req_body = req.get_json()
+        username = req_body.get('username')
+        password = req_body.get('password')
+
+        if not username or not password:
+            return func.HttpResponse(
+                body=json.dumps({"error": "Username and password are required"}),
+                mimetype="application/json",
+                status_code=400
+            )
+
+        # Get user
+        user = auth.get_user_by_username(username)
+        if not user:
+            logging.warning(f'Login failed: user not found - {username}')
+            return func.HttpResponse(
+                body=json.dumps({"error": "Invalid credentials"}),
+                mimetype="application/json",
+                status_code=401
+            )
+
+        # Verify password
+        if not auth.verify_password(password, user['password_hash']):
+            logging.warning(f'Login failed: invalid password - {username}')
+            return func.HttpResponse(
+                body=json.dumps({"error": "Invalid credentials"}),
+                mimetype="application/json",
+                status_code=401
+            )
+
+        # Update last login timestamp
+        auth.update_last_login(user['id'])
+
+        # Generate token
+        token_data = {
+            'id': user['id'],
+            'username': user['username'],
+            'role': user['role']
+        }
+        token = auth.generate_token(token_data)
+
+        # Return user data and token
+        logging.info(f'Login successful - {username}')
+        return func.HttpResponse(
+            body=json.dumps({
+                "token": token,
+                "user": {
+                    "id": user['id'],
+                    "username": user['username'],
+                    "full_name": user['full_name'],
+                    "role": user['role'],
+                    "must_change_password": user.get('must_change_password', False)
+                }
+            }),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    except ValueError as e:
+        logging.error(f'Login error: Invalid request body - {str(e)}')
+        return func.HttpResponse(
+            body=json.dumps({"error": "Invalid request body"}),
+            mimetype="application/json",
+            status_code=400
+        )
+    except Exception as e:
+        logging.error(f'Login error: {str(e)}')
+        return func.HttpResponse(
+            body=json.dumps({"error": "Login failed"}),
+            mimetype="application/json",
+            status_code=500
+        )
+
+
+@app.route(route="auth/me", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
+def auth_me(req: func.HttpRequest) -> func.HttpResponse:
+    """Get current authenticated user"""
+    logging.info('Auth me requested')
+
+    try:
+        # Verify token
+        user_payload = get_auth_user(req)
+        if not user_payload:
+            return func.HttpResponse(
+                body=json.dumps({"error": "Unauthorized"}),
+                mimetype="application/json",
+                status_code=401
+            )
+
+        # Get fresh user data
+        user = auth.get_user_by_id(user_payload['user_id'])
+        if not user:
+            return func.HttpResponse(
+                body=json.dumps({"error": "User not found"}),
+                mimetype="application/json",
+                status_code=404
+            )
+
+        return func.HttpResponse(
+            body=json.dumps({
+                "user": {
+                    "id": user['id'],
+                    "username": user['username'],
+                    "full_name": user['full_name'],
+                    "role": user['role']
+                }
+            }),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    except Exception as e:
+        logging.error(f'Auth me error: {str(e)}')
+        return func.HttpResponse(
+            body=json.dumps({"error": "Failed to get user"}),
+            mimetype="application/json",
+            status_code=500
+        )
+
+
+@app.route(route="auth/logout", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
+def auth_logout(req: func.HttpRequest) -> func.HttpResponse:
+    """Logout user (client-side token removal)"""
+    logging.info('Logout requested')
+
+    # JWT is stateless, so logout is handled client-side by removing the token
+    # This endpoint exists for consistency and future enhancements (e.g., token blacklist)
+    return func.HttpResponse(
+        body=json.dumps({"message": "Logged out successfully"}),
+        mimetype="application/json",
+        status_code=200
+    )
+
+
+@app.route(route="auth/change-password", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
+def auth_change_password(req: func.HttpRequest) -> func.HttpResponse:
+    """Change user password"""
+    logging.info('Password change attempt')
+
+    # Verify authentication
+    user_payload = get_auth_user(req)
+    if not user_payload:
+        return func.HttpResponse(
+            body=json.dumps({"error": "Unauthorized"}),
+            mimetype="application/json",
+            status_code=401
+        )
+
+    try:
+        req_body = req.get_json()
+        current_password = req_body.get('current_password')
+        new_password = req_body.get('new_password')
+
+        if not current_password or not new_password:
+            return func.HttpResponse(
+                body=json.dumps({"error": "Current password and new password are required"}),
+                mimetype="application/json",
+                status_code=400
+            )
+
+        # Validate new password strength
+        if len(new_password) < 8:
+            return func.HttpResponse(
+                body=json.dumps({"error": "New password must be at least 8 characters long"}),
+                mimetype="application/json",
+                status_code=400
+            )
+
+        # Get user
+        user = auth.get_user_by_id(user_payload['user_id'])
+        if not user:
+            return func.HttpResponse(
+                body=json.dumps({"error": "User not found"}),
+                mimetype="application/json",
+                status_code=404
+            )
+
+        # Verify current password
+        if not auth.verify_password(current_password, user['password_hash']):
+            logging.warning(f'Password change failed: invalid current password - {user["username"]}')
+            return func.HttpResponse(
+                body=json.dumps({"error": "Current password is incorrect"}),
+                mimetype="application/json",
+                status_code=401
+            )
+
+        # Update password
+        auth.update_user(user['id'], {'password': new_password})
+
+        logging.info(f'Password changed successfully - {user["username"]}')
+        return func.HttpResponse(
+            body=json.dumps({"message": "Password changed successfully"}),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    except ValueError as e:
+        logging.error(f'Password change error: {str(e)}')
+        return func.HttpResponse(
+            body=json.dumps({"error": "Invalid request body"}),
+            mimetype="application/json",
+            status_code=400
+        )
+    except Exception as e:
+        logging.error(f'Password change error: {str(e)}')
+        return func.HttpResponse(
+            body=json.dumps({"error": "Internal server error"}),
+            mimetype="application/json",
+            status_code=500
+        )
+
+
+# ============================================================================
+# User Management Endpoints (Admin Only)
+# ============================================================================
+
+@app.route(route="users", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
+def users_list(req: func.HttpRequest) -> func.HttpResponse:
+    """Get all users (Admin only)"""
+    logging.info('List users requested')
+
+    try:
+        # Verify token and check admin role
+        user_payload = get_auth_user(req)
+        if not user_payload:
+            return func.HttpResponse(
+                body=json.dumps({"error": "Unauthorized"}),
+                mimetype="application/json",
+                status_code=401
+            )
+
+        if user_payload.get('role') != 'Admin':
+            return func.HttpResponse(
+                body=json.dumps({"error": "Forbidden - Admin access required"}),
+                mimetype="application/json",
+                status_code=403
+            )
+
+        # Get all users
+        users = auth.get_all_users()
+
+        return func.HttpResponse(
+            body=json.dumps({"users": users}),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    except Exception as e:
+        logging.error(f'List users error: {str(e)}')
+        return func.HttpResponse(
+            body=json.dumps({"error": "Failed to list users"}),
+            mimetype="application/json",
+            status_code=500
+        )
+
+
+@app.route(route="users", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
+def users_create(req: func.HttpRequest) -> func.HttpResponse:
+    """Create new user (Admin only)"""
+    logging.info('Create user requested')
+
+    try:
+        # Verify token and check admin role
+        user_payload = get_auth_user(req)
+        if not user_payload:
+            return func.HttpResponse(
+                body=json.dumps({"error": "Unauthorized"}),
+                mimetype="application/json",
+                status_code=401
+            )
+
+        if user_payload.get('role') != 'Admin':
+            return func.HttpResponse(
+                body=json.dumps({"error": "Forbidden - Admin access required"}),
+                mimetype="application/json",
+                status_code=403
+            )
+
+        # Get request body
+        req_body = req.get_json()
+        username = req_body.get('username')
+        password = req_body.get('password')
+        full_name = req_body.get('full_name')
+        role = req_body.get('role')
+
+        if not username or not password or not full_name or not role:
+            return func.HttpResponse(
+                body=json.dumps({"error": "username, password, full_name, and role are required"}),
+                mimetype="application/json",
+                status_code=400
+            )
+
+        # Create user
+        new_user = auth.create_user(username, password, full_name, role)
+
+        logging.info(f'User created: {username}')
+        return func.HttpResponse(
+            body=json.dumps({"user": new_user}),
+            mimetype="application/json",
+            status_code=201
+        )
+
+    except ValueError as e:
+        logging.error(f'Create user error: {str(e)}')
+        return func.HttpResponse(
+            body=json.dumps({"error": str(e)}),
+            mimetype="application/json",
+            status_code=400
+        )
+    except Exception as e:
+        logging.error(f'Create user error: {str(e)}')
+        return func.HttpResponse(
+            body=json.dumps({"error": "Failed to create user"}),
+            mimetype="application/json",
+            status_code=500
+        )
+
+
+@app.route(route="users/{user_id}", methods=["PUT"], auth_level=func.AuthLevel.ANONYMOUS)
+def users_update(req: func.HttpRequest) -> func.HttpResponse:
+    """Update user (Admin only)"""
+    user_id = req.route_params.get('user_id')
+    logging.info(f'Update user requested: {user_id}')
+
+    try:
+        # Verify token and check admin role
+        user_payload = get_auth_user(req)
+        if not user_payload:
+            return func.HttpResponse(
+                body=json.dumps({"error": "Unauthorized"}),
+                mimetype="application/json",
+                status_code=401
+            )
+
+        if user_payload.get('role') != 'Admin':
+            return func.HttpResponse(
+                body=json.dumps({"error": "Forbidden - Admin access required"}),
+                mimetype="application/json",
+                status_code=403
+            )
+
+        # Get request body
+        req_body = req.get_json()
+        updates = {}
+
+        # Collect allowed updates
+        if 'username' in req_body:
+            updates['username'] = req_body['username']
+        if 'full_name' in req_body:
+            updates['full_name'] = req_body['full_name']
+        if 'role' in req_body:
+            updates['role'] = req_body['role']
+        if 'password' in req_body:
+            updates['password'] = req_body['password']
+        if 'must_change_password' in req_body:
+            updates['must_change_password'] = req_body['must_change_password']
+
+        if not updates:
+            return func.HttpResponse(
+                body=json.dumps({"error": "No valid fields to update"}),
+                mimetype="application/json",
+                status_code=400
+            )
+
+        # Update user
+        updated_user = auth.update_user(user_id, updates)
+
+        if not updated_user:
+            return func.HttpResponse(
+                body=json.dumps({"error": "User not found"}),
+                mimetype="application/json",
+                status_code=404
+            )
+
+        logging.info(f'User updated: {user_id}')
+        return func.HttpResponse(
+            body=json.dumps({"user": updated_user}),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    except ValueError as e:
+        logging.error(f'Update user error: {str(e)}')
+        return func.HttpResponse(
+            body=json.dumps({"error": str(e)}),
+            mimetype="application/json",
+            status_code=400
+        )
+    except Exception as e:
+        logging.error(f'Update user error: {str(e)}')
+        return func.HttpResponse(
+            body=json.dumps({"error": "Failed to update user"}),
+            mimetype="application/json",
+            status_code=500
+        )
+
+
+@app.route(route="users/{user_id}", methods=["DELETE"], auth_level=func.AuthLevel.ANONYMOUS)
+def users_delete(req: func.HttpRequest) -> func.HttpResponse:
+    """Delete user (Admin only)"""
+    user_id = req.route_params.get('user_id')
+    logging.info(f'Delete user requested: {user_id}')
+
+    try:
+        # Verify token and check admin role
+        user_payload = get_auth_user(req)
+        if not user_payload:
+            return func.HttpResponse(
+                body=json.dumps({"error": "Unauthorized"}),
+                mimetype="application/json",
+                status_code=401
+            )
+
+        if user_payload.get('role') != 'Admin':
+            return func.HttpResponse(
+                body=json.dumps({"error": "Forbidden - Admin access required"}),
+                mimetype="application/json",
+                status_code=403
+            )
+
+        # Prevent self-deletion
+        if user_payload.get('user_id') == user_id:
+            return func.HttpResponse(
+                body=json.dumps({"error": "Cannot delete your own account"}),
+                mimetype="application/json",
+                status_code=400
+            )
+
+        # Delete user
+        success = auth.delete_user(user_id)
+
+        if not success:
+            return func.HttpResponse(
+                body=json.dumps({"error": "User not found"}),
+                mimetype="application/json",
+                status_code=404
+            )
+
+        logging.info(f'User deleted: {user_id}')
+        return func.HttpResponse(
+            body=json.dumps({"message": "User deleted successfully"}),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    except Exception as e:
+        logging.error(f'Delete user error: {str(e)}')
+        return func.HttpResponse(
+            body=json.dumps({"error": "Failed to delete user"}),
+            mimetype="application/json",
+            status_code=500
+        )
+
+
+# ============================================================================
+# Data Endpoints
 # ============================================================================
 
 @app.route(route="health", auth_level=func.AuthLevel.ANONYMOUS)
@@ -949,3 +1430,191 @@ def get_devops_items(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json",
             status_code=500
         )
+
+# ============================================================================
+# AI Insights Generation Endpoint
+# ============================================================================
+
+@app.route(route="generate_insights", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
+def generate_insights(req: func.HttpRequest) -> func.HttpResponse:
+    """Generate AI-powered insights from aggregated ticket data using Claude"""
+    logging.info('Generate insights function triggered')
+
+    try:
+        # Import Anthropic SDK
+        from anthropic import Anthropic
+
+        # Get request body
+        req_body = req.get_json()
+
+        # Extract data from request
+        aggregated_data = req_body.get('aggregated_data')
+        focus_area = req_body.get('focus_area', 'summary')  # summary, trends, performance, priority, predictive, full
+        date_range = req_body.get('date_range', {})
+
+        if not aggregated_data:
+            return func.HttpResponse(
+                json.dumps({"error": "aggregated_data is required"}),
+                mimetype="application/json",
+                status_code=400
+            )
+
+        # Get API key from environment
+        api_key = os.environ.get('ANTHROPIC_API_KEY')
+        if not api_key:
+            return func.HttpResponse(
+                json.dumps({"error": "ANTHROPIC_API_KEY not configured"}),
+                mimetype="application/json",
+                status_code=500
+            )
+
+        # Initialize Anthropic client
+        client = Anthropic(api_key=api_key)
+
+        # Build system prompt based on focus area
+        system_prompt = _get_insights_system_prompt(focus_area)
+
+        # Build user message with aggregated data
+        user_message = _build_insights_user_message(aggregated_data, date_range, focus_area)
+
+        # Call Claude API
+        logging.info(f'Calling Claude API for focus area: {focus_area}')
+        message = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=2000,
+            temperature=0.7,
+            system=system_prompt,
+            messages=[
+                {
+                    "role": "user",
+                    "content": user_message
+                }
+            ]
+        )
+
+        # Extract insights text
+        insights_text = message.content[0].text
+
+        # Return response
+        return func.HttpResponse(
+            json.dumps({
+                "insights": insights_text,
+                "focus_area": focus_area,
+                "date_range": date_range,
+                "tokens_used": {
+                    "input": message.usage.input_tokens,
+                    "output": message.usage.output_tokens
+                }
+            }),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    except ValueError as e:
+        logging.error(f'Invalid request body: {str(e)}')
+        return func.HttpResponse(
+            json.dumps({"error": "Invalid request body"}),
+            mimetype="application/json",
+            status_code=400
+        )
+    except Exception as e:
+        logging.error(f'Error generating insights: {str(e)}')
+        return func.HttpResponse(
+            json.dumps({"error": f"Error generating insights: {str(e)}"}),
+            mimetype="application/json",
+            status_code=500
+        )
+
+
+def _get_insights_system_prompt(focus_area):
+    """Get system prompt based on focus area"""
+
+    base_prompt = """You are an executive business analyst specializing in customer support operations.
+Your role is to analyze support ticket data and provide clear, actionable insights for C-level executives.
+
+Key guidelines:
+- Focus on business impact and strategic implications
+- Use clear, concise language appropriate for executives
+- Highlight trends, patterns, and anomalies
+- Provide specific, actionable recommendations
+- Use emojis sparingly to highlight key sections
+- Format output in markdown for readability"""
+
+    focus_prompts = {
+        'summary': """
+Focus on providing a high-level executive summary:
+- Overall ticket volume trends
+- Key performance indicators
+- Most notable insights (2-3 items)
+- Immediate action items if any
+Keep it brief (3-4 paragraphs).""",
+
+        'trends': """
+Focus on identifying trends and patterns:
+- Volume trends over time
+- Day-of-week patterns
+- Platform/league distribution shifts
+- Issue type evolution
+- Response time trends
+Provide forward-looking insights.""",
+
+        'performance': """
+Focus on team performance metrics:
+- Response time analysis
+- Resolution rate assessment
+- Workload distribution
+- Efficiency opportunities
+- Bottleneck identification
+Include specific improvement recommendations.""",
+
+        'priority': """
+Focus on priority and risk analysis:
+- Urgent/High priority ticket trends
+- Critical issue identification
+- Platform/league risk areas
+- Resource allocation recommendations
+- Escalation patterns
+Highlight areas needing immediate attention.""",
+
+        'predictive': """
+Focus on predictive insights and forecasting:
+- Projected ticket volumes
+- Potential capacity issues
+- Seasonal patterns
+- Resource planning recommendations
+- Proactive measures to consider
+Help plan for the future.""",
+
+        'full': """
+Provide a comprehensive analysis covering:
+1. Executive Summary
+2. Volume & Trend Analysis
+3. Performance Metrics
+4. Priority & Risk Assessment
+5. Platform/League Insights
+6. Recommendations & Action Items
+This should be a detailed report (8-12 paragraphs)."""
+    }
+
+    return base_prompt + "\n" + focus_prompts.get(focus_area, focus_prompts['summary'])
+
+
+def _build_insights_user_message(aggregated_data, date_range, focus_area):
+    """Build user message with aggregated data"""
+
+    # Format date range
+    date_range_str = f"{date_range.get('start_date', 'N/A')} to {date_range.get('end_date', 'N/A')}"
+
+    # Build message
+    message = f"""Analyze the following support ticket data for the period: {date_range_str}
+
+**Aggregated Data:**
+```json
+{json.dumps(aggregated_data, indent=2)}
+```
+
+Please provide insights focused on: **{focus_area}**
+
+Note: All personally identifiable information (PII) has been removed from this data."""
+
+    return message
